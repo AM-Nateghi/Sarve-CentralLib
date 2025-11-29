@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+
+<head>
+    <meta charset="utf-8" />
+    <title>سیستم ضدکخ</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
+    <meta name="theme-color" content="#4f46e5" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <style>
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal-backdrop {
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        /* Mobile-First Responsive */
+        * {
+            touch-action: manipulation;
+        }
+
+        button {
+            min-height: 44px;
+        }
+
+        /* iOS minimum touch target */
+        input {
+            min-height: 44px;
+            font-size: 16px;
+        }
+
+        /* Prevent zoom on input focus */
+
+        /* Safe area for notch devices */
+        @supports (padding: max(0px)) {
+            body {
+                padding-left: max(0px, env(safe-area-inset-left));
+                padding-right: max(0px, env(safe-area-inset-right));
+            }
+        }
+
+        /* Smooth scrolling */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Prevent text selection on buttons */
+        button,
+        [role="button"] {
+            -webkit-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 text-slate-800 overflow-x-hidden">
+    <div class="min-h-screen p-4">
+        <div class="max-w-2xl mx-auto">
+            <!-- Header -->
+            <header class="text-center mb-8 pt-6">
+                <h1
+                    class="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    سیستم ضدکخ</h1>
+                <p class="text-slate-500 mt-2">رزرو هوشمند صندلی کتابخانه</p>
+            </header>
+
+            <!-- Main cards grid -->
+            <div class="grid gap-6 mb-8">
+                <!-- Config card -->
+                <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 space-y-5">
+                    <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <h2 class="text-xl font-bold">⚙️ تنظیمات</h2>
+                        <button id="openSettingsBtn"
+                            class="text-indigo-600 hover:bg-indigo-50 p-2 rounded-lg transition text-xl">🔧</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="bg-slate-50 rounded-lg p-3">
+                            <p class="text-xs text-slate-500 mb-1">شماره صندلی</p>
+                            <p id="seatDisplay" class="text-2xl font-bold text-indigo-600">—</p>
+                        </div>
+                        <div class="bg-slate-50 rounded-lg p-3">
+                            <p class="text-xs text-slate-500 mb-1">حالت تاریخ</p>
+                            <p id="dateModeDisplay" class="text-2xl font-bold text-purple-600">—</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-sm font-semibold mb-3 block">بازه‌های زمانی:</label>
+                        <div id="windowsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            <!-- Checkboxes injected here -->
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <button id="reserveNowBtn"
+                            class="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-105 active:scale-95">
+                            🚀 رزرو فوری
+                        </button>
+                        <button id="saveConfigBtn"
+                            class="rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-900 px-5 py-3 font-bold transition">
+                            💾 ذخیره
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Quota and quota info -->
+                <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
+                    <h3 class="font-bold mb-3">📊 وضعیت سهم</h3>
+                    <p id="quotaDisplay" class="text-sm text-slate-600 p-3 bg-slate-50 rounded-lg">در حال بارگذاری...
+                    </p>
+                </section>
+
+                <!-- Week preview -->
+                <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+                        <h2 class="text-xl font-bold">📅 جدول هفتگی</h2>
+                        <span class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">تا ۱۰ روز
+                            آینده</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-slate-200">
+                                    <th class="text-right py-3 font-semibold text-slate-700">تاریخ</th>
+                                    <th class="text-right py-3 font-semibold text-slate-700">بازه‌ها</th>
+                                    <th class="text-right py-3 font-semibold text-slate-700">وضعیت</th>
+                                    <th class="text-right py-3 font-semibold text-slate-700">عملیات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="weekTableBody" class="divide-y divide-slate-100">
+                                <!-- Rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- History Section -->
+                <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+                        <h2 class="text-xl font-bold">📋 تاریخچه رزروها</h2>
+                        <span class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full">۵۰ ورودی اخیر</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b border-slate-200">
+                                    <th class="text-right py-3 font-semibold text-slate-700">تاریخ</th>
+                                    <th class="text-right py-3 font-semibold text-slate-700">بازه</th>
+                                    <th class="text-right py-3 font-semibold text-slate-700">وضعیت</th>
+                                    <th class="text-right py-3 font-semibold text-slate-700">پیام</th>
+                                    <th class="text-right py-3 font-semibold text-slate-700">زمان</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTableBody" class="divide-y divide-slate-100">
+                                <!-- History entries injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <p id="historyEmpty" class="text-center text-slate-500 py-8 text-sm">هیچ رزروی ثبت نشده است</p>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    </table>
+    </div>
+    </section>
+    <div id="settingsModal"
+        class="fixed inset-0 modal-backdrop opacity-0 pointer-events-none transition-opacity z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-fade-in max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
+                <h2 class="text-2xl font-bold">⚙️ تنظیمات پیشرفته</h2>
+                <button id="closeSettingsBtn" class="text-2xl text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <!-- Username -->
+                <div>
+                    <label class="text-sm font-semibold block mb-2">نام کاربری (شماره تلفن)</label>
+                    <input id="usernameInput" type="text"
+                        class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="0928731571">
+                </div>
+
+                <!-- Password -->
+                <div>
+                    <label class="text-sm font-semibold block mb-2">رمز عبور</label>
+                    <input id="passwordInput" type="password"
+                        class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="••••••••">
+                </div>
+
+                <!-- Seat Number -->
+                <div>
+                    <label class="text-sm font-semibold block mb-2">شماره صندلی</label>
+                    <input id="seatNumberInput" type="number"
+                        class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="33">
+                </div>
+
+                <!-- Reserve Mode -->
+                <div>
+                    <label class="text-sm font-semibold block mb-3">حالت رزرو</label>
+                    <div class="space-y-2">
+                        <label
+                            class="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                            <input id="todayRadio" type="radio" name="reserveMode" value="today"
+                                class="w-4 h-4 accent-indigo-600">
+                            <span>امروز</span>
+                        </label>
+                        <label
+                            class="flex items-center gap-3 p-3 border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer">
+                            <input id="tomorrowRadio" type="radio" name="reserveMode" value="tomorrow"
+                                class="w-4 h-4 accent-indigo-600">
+                            <span>فردا</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Service Code -->
+                <div>
+                    <label class="text-sm font-semibold block mb-2">کد سرویس (SC)</label>
+                    <input id="scInput" type="text"
+                        class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
+                        placeholder="ktDKKeFZe5lkOhWTITfdmQ==">
+                </div>
+
+                <!-- Save Button -->
+                <button id="saveSettingsBtn"
+                    class="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 font-bold hover:shadow-lg transition">
+                    ✓ ذخیره تنظیمات
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Day Edit Modal -->
+    <div id="dayEditModal"
+        class="fixed inset-0 modal-backdrop opacity-0 pointer-events-none transition-opacity z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-fade-in">
+            <div class="border-b border-slate-200 p-6 flex items-center justify-between">
+                <h2 class="text-2xl font-bold" id="dayEditTitle">ویرایش روز</h2>
+                <button id="closeDayEditBtn" class="text-2xl text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-slate-600">بازه‌های موجود را برای این روز انتخاب کنید:</p>
+                <div id="dayEditCheckboxes" class="space-y-2">
+                    <!-- Checkboxes injected here -->
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button id="saveDayEditBtn"
+                        class="flex-1 rounded-lg bg-indigo-600 text-white py-2 font-bold hover:bg-indigo-700 transition">
+                        ✓ ذخیره
+                    </button>
+                    <button id="deleteDayEditBtn"
+                        class="flex-1 rounded-lg bg-red-100 text-red-700 py-2 font-bold hover:bg-red-200 transition">
+                        🗑️ حذف
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast"
+        class="fixed bottom-4 right-4 max-w-sm bg-slate-900 text-white px-6 py-3 rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity">
+        <div id="toastMessage"></div>
+    </div>
+
+    <script>
+        const TIME_WINDOWS = ["8-11", "11-14", "14-17", "17-20", "20-21"];
+        let currentEditDay = null;
+
+        // ==================== Modal & Toast Helpers ====================
+        function showModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.remove("opacity-0", "pointer-events-none");
+        }
+
+        function hideModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.add("opacity-0", "pointer-events-none");
+        }
+
+        function showToast(message, isSuccess = true) {
+            const toast = document.getElementById("toast");
+            const icon = isSuccess ? "✓" : "⚠️";
+            document.getElementById("toastMessage").textContent = `${icon} ${message}`;
+            toast.classList.remove("bg-red-600", "bg-slate-900");
+            toast.classList.add(isSuccess ? "bg-slate-900" : "bg-red-600");
+            toast.classList.remove("opacity-0");
+            setTimeout(() => toast.classList.add("opacity-0"), 3000);
+        }
+
+        // ==================== Jalali Date Helper ====================
+        function jalaliOf(d) {
+            const gy = d.getFullYear(), gm = d.getMonth() + 1, gd = d.getDate();
+            function div(a, b) { return Math.floor(a / b) }
+            const g_d_m = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || (gy % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+            let gy2 = gy - 1600, gm2 = gm - 1, gd2 = gd - 1;
+            let g_day_no = 365 * gy2 + div(gy2 + 3, 4) - div(gy2 + 99, 100) + div(gy2 + 399, 400);
+            for (let i = 0; i < gm2; i++) g_day_no += g_d_m[i + 1];
+            g_day_no += gd2;
+            let j_day_no = g_day_no - 79;
+            const j_np = div(j_day_no, 12053); j_day_no %= 12053;
+            let jy = 979 + 33 * j_np + 4 * div(j_day_no, 1461); j_day_no %= 1461;
+            if (j_day_no >= 366) { jy += div(j_day_no - 366, 365); j_day_no = (j_day_no - 366) % 365; }
+            const jm_list = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
+            let jm = 0; for (; jm < 12 && j_day_no >= jm_list[jm]; jm++) j_day_no -= jm_list[jm];
+            const jd = j_day_no + 1;
+            return `${jy}/${String(jm + 1).padStart(2, "0")}/${String(jd).padStart(2, "0")}`;
+        }
+
+        // ==================== Load and Render Config ====================
+        async function loadConfig() {
+            try {
+                const r = await fetch("/api/config");
+                const cfg = await r.json();
+
+                // Update displays
+                document.getElementById("seatDisplay").textContent = cfg.seat_number;
+                document.getElementById("dateModeDisplay").textContent = cfg.reserveDateMode === "tomorrow" ? "🌙 فردا" : "☀️ امروز";
+                document.getElementById("quotaDisplay").textContent = cfg.lastMonthQuota || "اطلاعاتی موجود نیست";
+
+                // Update modal inputs
+                document.getElementById("usernameInput").value = cfg.username || "";
+                document.getElementById("passwordInput").value = cfg.passwd || "";
+                document.getElementById("seatNumberInput").value = cfg.seat_number || 33;
+                document.getElementById("scInput").value = cfg.sc || "";
+
+                if (cfg.reserveDateMode === "tomorrow") {
+                    document.getElementById("tomorrowRadio").checked = true;
+                } else {
+                    document.getElementById("todayRadio").checked = true;
+                }
+
+                // Render windows
+                const wrap = document.getElementById("windowsGrid");
+                wrap.innerHTML = "";
+                const selected = cfg.selectedWindows || [];
+                TIME_WINDOWS.forEach(w => {
+                    const checked = selected.includes(w);
+                    wrap.insertAdjacentHTML("beforeend", `
+            <label class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-indigo-50 cursor-pointer transition ${checked ? 'bg-indigo-50 border-indigo-400' : ''}">
+              <input type="checkbox" value="${w}" ${checked ? "checked" : ""} class="window-checkbox accent-indigo-600 w-5 h-5">
+              <span class="font-medium text-sm">${w}</span>
+            </label>
+          `);
+                });
+
+                // Render week table
+                renderWeekTable(cfg);
+
+                // Load and render history
+                loadHistory();
+            } catch (e) {
+                showToast("خطا در بارگذاری تنظیمات: " + e.message, false);
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const r = await fetch("/api/history?limit=50");
+                const data = await r.json();
+
+                if (data.ok && data.entries && data.entries.length > 0) {
+                    renderHistory(data.entries);
+                } else {
+                    renderEmptyHistory();
+                }
+            } catch (e) {
+                console.error("Error loading history:", e.message);
+                renderEmptyHistory();
+            }
+        }
+
+        function renderHistory(entries) {
+            const tbody = document.getElementById("historyTableBody");
+            const emptyMsg = document.getElementById("historyEmpty");
+
+            tbody.innerHTML = "";
+            emptyMsg.style.display = "none";
+
+            entries.forEach(entry => {
+                const statusIcon = entry.status === "success" ? "✅" : "❌";
+                const statusColor = entry.status === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700";
+                const time = new Date(entry.timestamp).toLocaleTimeString("fa-IR");
+                const message = entry.message || entry.error || "—";
+
+                tbody.insertAdjacentHTML("beforeend", `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-3 text-right text-sm">${entry.jalaliDate}</td>
+            <td class="py-3 text-right text-sm font-mono">${entry.window}</td>
+            <td class="py-3 text-right">
+              <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusColor}">
+                ${statusIcon} ${entry.status === "success" ? "موفق" : "ناموفق"}
+              </span>
+            </td>
+            <td class="py-3 text-right text-xs text-slate-600 max-w-xs truncate" title="${message}">${message}</td>
+            <td class="py-3 text-right text-xs text-slate-500">${time}</td>
+          </tr>
+        `);
+            });
+        }
+
+        function renderEmptyHistory() {
+            const tbody = document.getElementById("historyTableBody");
+            const emptyMsg = document.getElementById("historyEmpty");
+
+            tbody.innerHTML = "";
+            emptyMsg.style.display = "block";
+        }
+
+        function renderWeekTable(cfg) {
+            const tbody = document.getElementById("weekTableBody");
+            tbody.innerHTML = "";
+            const now = new Date();
+
+            for (let i = 0; i <= 9; i++) {
+                const d = new Date();
+                d.setDate(now.getDate() + i);
+                const iso = d.toISOString().slice(0, 10);
+                const scheduled = cfg.scheduledDays?.[iso] || [];
+                const shamsi = jalaliOf(d);
+                const isToday = i === 0;
+                const isTomorrow = i === 1;
+
+                tbody.insertAdjacentHTML("beforeend", `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-3 text-right">
+              <div class="font-medium">${shamsi}</div>
+              <div class="text-xs text-slate-500">${isToday ? "(امروز)" : isTomorrow ? "(فردا)" : ""}</div>
+            </td>
+            <td class="py-3 text-right">
+              <div class="text-sm text-slate-600">${scheduled.length > 0 ? scheduled.join(", ") : "—"}</div>
+            </td>
+            <td class="py-3 text-right">
+              <span class="text-xs font-semibold px-2 py-1 rounded-full ${scheduled.length ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"}">
+                ${scheduled.length ? "✓ تایم‌بندی شده" : "خالی"}
+              </span>
+            </td>
+            <td class="py-3 text-right">
+              <button onclick="editDay('${iso}')" class="text-indigo-600 hover:text-indigo-800 text-sm font-semibold hover:underline">ویرایش</button>
+            </td>
+          </tr>
+        `);
+            }
+        }
+
+        // ==================== Edit Day ====================
+        function editDay(iso) {
+            currentEditDay = iso;
+            const d = new Date(iso);
+            const shamsi = jalaliOf(d);
+            document.getElementById("dayEditTitle").textContent = `ویرایش: ${shamsi}`;
+
+            // Load current selections
+            fetch("/api/config").then(r => r.json()).then(cfg => {
+                const scheduled = cfg.scheduledDays?.[iso] || [];
+                const wrap = document.getElementById("dayEditCheckboxes");
+                wrap.innerHTML = "";
+                TIME_WINDOWS.forEach(w => {
+                    const checked = scheduled.includes(w);
+                    wrap.insertAdjacentHTML("beforeend", `
+            <label class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-indigo-50 cursor-pointer transition ${checked ? 'bg-indigo-50 border-indigo-400' : ''}">
+              <input type="checkbox" class="dayedit-checkbox accent-indigo-600 w-5 h-5" value="${w}" ${checked ? "checked" : ""}>
+              <span class="font-medium flex-1">${w}</span>
+            </label>
+          `);
+                });
+            });
+
+            showModal("dayEditModal");
+        }
+
+        async function saveDayEdit() {
+            const selected = Array.from(document.querySelectorAll(".dayedit-checkbox:checked")).map(x => x.value);
+            try {
+                const r = await fetch("/api/schedule-day", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ date: currentEditDay, windows: selected })
+                });
+                const data = await r.json();
+                if (data.ok) {
+                    showToast("روز بروزشد شد");
+                    hideModal("dayEditModal");
+                    loadConfig();
+                } else {
+                    showToast("خطا: " + data.error, false);
+                }
+            } catch (e) {
+                showToast("خطا: " + e.message, false);
+            }
+        }
+
+        async function deleteDay() {
+            if (confirm("آیا مطمئن هستید؟")) {
+                try {
+                    const r = await fetch("/api/schedule-day", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ date: currentEditDay, windows: [] })
+                    });
+                    const data = await r.json();
+                    if (data.ok) {
+                        showToast("روز حذف شد");
+                        hideModal("dayEditModal");
+                        loadConfig();
+                    } else {
+                        showToast("خطا: " + data.error, false);
+                    }
+                } catch (e) {
+                    showToast("خطا: " + e.message, false);
+                }
+            }
+        }
+
+        // ==================== Main Actions ====================
+        async function saveMainConfig() {
+            const selected = Array.from(document.querySelectorAll(".window-checkbox:checked")).map(x => x.value);
+            const mode = document.querySelector("input[name='reserveMode']:checked")?.value || "today";
+
+            try {
+                const r = await fetch("/api/config", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ selectedWindows: selected, reserveDateMode: mode })
+                });
+                const data = await r.json();
+                if (data.ok) {
+                    showToast("تنظیمات صفحه ذخیره شد");
+                    loadConfig();
+                } else {
+                    showToast("خطا: " + data.error, false);
+                }
+            } catch (e) {
+                showToast("خطا: " + e.message, false);
+            }
+        }
+
+        async function saveAdvancedSettings() {
+            const body = {
+                username: document.getElementById("usernameInput").value,
+                passwd: document.getElementById("passwordInput").value,
+                seat_number: parseInt(document.getElementById("seatNumberInput").value, 10) || 33,
+                sc: document.getElementById("scInput").value,
+                reserveDateMode: document.querySelector("input[name='reserveMode']:checked")?.value || "today"
+            };
+
+            try {
+                const r = await fetch("/api/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
+                const data = await r.json();
+                if (data.ok) {
+                    showToast("تنظیمات ذخیره شدند");
+                    hideModal("settingsModal");
+                    loadConfig();
+                } else {
+                    showToast("خطا: " + data.error, false);
+                }
+            } catch (e) {
+                showToast("خطا: " + e.message, false);
+            }
+        }
+
+        async function reserveNow() {
+            const selected = Array.from(document.querySelectorAll(".window-checkbox:checked")).map(x => x.value);
+            if (!selected.length) {
+                showToast("هیچ بازه‌ای انتخاب نشده است", false);
+                return;
+            }
+
+            const btn = document.getElementById("reserveNowBtn");
+            btn.disabled = true;
+            btn.innerHTML = "⏳ در حال رزرو...";
+
+            try {
+                const r = await fetch("/api/reserve", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ windows: selected })
+                });
+                const data = await r.json();
+
+                if (data.ok && data.results) {
+                    const successes = data.results.filter(x => x.success).length;
+                    const total = data.results.length;
+                    showToast(`نتیجه: ${successes}/${total} رزرو موفق`);
+                    loadConfig();
+                } else {
+                    showToast(data.error || "خطا در رزرو", false);
+                }
+            } catch (e) {
+                showToast("خطا: " + e.message, false);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "🚀 رزرو فوری";
+            }
+        }
+
+        // ==================== Event Listeners ====================
+        document.getElementById("openSettingsBtn").addEventListener("click", () => showModal("settingsModal"));
+        document.getElementById("closeSettingsBtn").addEventListener("click", () => hideModal("settingsModal"));
+        document.getElementById("closeDayEditBtn").addEventListener("click", () => hideModal("dayEditModal"));
+
+        document.getElementById("saveConfigBtn").addEventListener("click", saveMainConfig);
+        document.getElementById("reserveNowBtn").addEventListener("click", reserveNow);
+        document.getElementById("saveSettingsBtn").addEventListener("click", saveAdvancedSettings);
+        document.getElementById("saveDayEditBtn").addEventListener("click", saveDayEdit);
+        document.getElementById("deleteDayEditBtn").addEventListener("click", deleteDay);
+
+        // Close modals on backdrop click
+        document.getElementById("settingsModal").addEventListener("click", (e) => {
+            if (e.target.id === "settingsModal") hideModal("settingsModal");
+        });
+        document.getElementById("dayEditModal").addEventListener("click", (e) => {
+            if (e.target.id === "dayEditModal") hideModal("dayEditModal");
+        });
+
+        // Initial load
+        loadConfig();
+        loadHistory();
+        setInterval(loadConfig, 30000); // Refresh config every 30 seconds
+        setInterval(loadHistory, 30000); // Refresh history every 30 seconds
+    </script>
+</body>
+
+</html>
