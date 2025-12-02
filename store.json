@@ -2,6 +2,15 @@
   "username": "0928731571",
   "passwd": "AmN!@#27",
   "seat_number": 33,
+  "seat_priority": [
+    33,
+    32,
+    34,
+    37,
+    42
+  ],
+  "concurrency": 3,
+  "requestStartSpreadMs": 400,
   "sc": "ktDKKeFZe5lkOhWTITfdmQ==",
   "reserveDateMode": "tomorrow",
   "selectedWindows": [
@@ -25,6 +34,12 @@
       "20-21"
     ],
     "2025-11-30": [
+      "8-11",
+      "11-14",
+      "14-17",
+      "17-20"
+    ],
+    "2025-12-03": [
       "8-11",
       "11-14",
       "14-17",

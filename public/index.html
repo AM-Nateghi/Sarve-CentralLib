@@ -216,6 +216,33 @@
                         placeholder="33">
                 </div>
 
+                <!-- Seat Priority List -->
+                <div>
+                    <label class="text-sm font-semibold block mb-2">ترتیب اولویت صندلی‌ها (با کاما جدا شده)</label>
+                    <input id="seatPriorityInput" type="text"
+                        class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm"
+                        placeholder="33,32,34,37,42">
+                    <p class="text-xs text-slate-500 mt-1">اولا ۳۳ تلاش می‌شود، بعد ۳۲، و...تا هرچیزی موجود شود</p>
+                </div>
+
+                <!-- Concurrency and spread -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-sm font-semibold block mb-2">Concurrency (همزمانی)</label>
+                        <input id="concurrencyInput" type="number" min="1" max="8" value="3"
+                            class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="3">
+                        <p class="text-xs text-slate-500 mt-1">تعداد درخواست همزمان پس از لاگین (پیش‌فرض 3)</p>
+                    </div>
+                    <div>
+                        <label class="text-sm font-semibold block mb-2">Spread (ms)</label>
+                        <input id="requestSpreadInput" type="number" min="0" max="2000" value="400"
+                            class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="400">
+                        <p class="text-xs text-slate-500 mt-1">حداکثر پراکندگی تصادفی شروع درخواست‌ها به میلی‌ثانیه</p>
+                    </div>
+                </div>
+
                 <!-- Reserve Mode -->
                 <div>
                     <label class="text-sm font-semibold block mb-3">حالت رزرو</label>
@@ -345,6 +372,9 @@
                 document.getElementById("usernameInput").value = cfg.username || "";
                 document.getElementById("passwordInput").value = cfg.passwd || "";
                 document.getElementById("seatNumberInput").value = cfg.seat_number || 33;
+                document.getElementById("seatPriorityInput").value = (cfg.seat_priority || [33, 32, 34, 37, 42]).join(",");
+                document.getElementById("concurrencyInput").value = (typeof cfg.concurrency !== 'undefined') ? cfg.concurrency : 3;
+                document.getElementById("requestSpreadInput").value = (typeof cfg.requestStartSpreadMs !== 'undefined') ? cfg.requestStartSpreadMs : 400;
                 document.getElementById("scInput").value = cfg.sc || "";
 
                 if (cfg.reserveDateMode === "tomorrow") {
@@ -559,10 +589,24 @@
         }
 
         async function saveAdvancedSettings() {
+            const priorityStr = document.getElementById("seatPriorityInput").value.trim();
+            const priorityList = priorityStr
+                .split(",")
+                .map(s => parseInt(s.trim(), 10))
+                .filter(n => !isNaN(n));
+
+            if (priorityList.length === 0) {
+                showToast("لیست اولویت صندلی نمی‌تواند خالی باشد", false);
+                return;
+            }
+
             const body = {
                 username: document.getElementById("usernameInput").value,
                 passwd: document.getElementById("passwordInput").value,
                 seat_number: parseInt(document.getElementById("seatNumberInput").value, 10) || 33,
+                seat_priority: priorityList,
+                concurrency: parseInt(document.getElementById("concurrencyInput").value, 10) || 3,
+                requestStartSpreadMs: parseInt(document.getElementById("requestSpreadInput").value, 10) || 400,
                 sc: document.getElementById("scInput").value,
                 reserveDateMode: document.querySelector("input[name='reserveMode']:checked")?.value || "today"
             };

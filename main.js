@@ -42,6 +42,12 @@ const defaultStore = {
     username: "0928731571",
     passwd: "AmN!@#27",
     seat_number: 33,
+    seat_priority: [33, 32, 34, 37, 42],
+    // How many concurrent reserve requests to run after a single login.
+    // Keep this small to avoid overloading the server. Default 3.
+    concurrency: 5,
+    // Maximum random spread (ms) to stagger request start times to avoid bursts.
+    requestStartSpreadMs: 400,
     sc: "ktDKKeFZe5lkOhWTITfdmQ==",
     reserveDateMode: "today", // today | tomorrow
     selectedWindows: [], // e.g., ["8-11","17-20"]
@@ -61,6 +67,8 @@ function writeStore(st) {
 }
 
 // -------------------- Reservation core (login/reserve) --------------------
+let GLOBAL_CLIENT = null;  // Global client for session persistence
+
 const TIME_WINDOWS = {
     "8-11": { start: 8, end: 11 },
     "11-14": { start: 11, end: 14 },
@@ -88,7 +96,7 @@ function buildClient() {
     const client = wrapper(axios.create({
         jar,
         withCredentials: true,
-        timeout: 15000
+        timeout: 45000  // 45 seconds
     }));
     client.defaults.headers.common["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
     return client;
@@ -161,35 +169,95 @@ async function openSeatPopupHTML(client, store, dateInfo, label) {
         throw new Error(`Failed to get seat popup for ${label}: ${e.message}`);
     }
 }
+
+// انتخاب صندلی بر اساس اولویت
+function selectSeatByPriority(allSeats, priorityList) {
+    // ابتدا صندلی‌های موجود رو فیلتر می‌کنیم
+    const availableSeats = allSeats.filter(s => s.available);
+
+    if (availableSeats.length === 0) {
+        throw new Error("No seats available");
+    }
+
+    // در اولویت‌ها جستجو می‌کنیم
+    for (const prioritySeatNum of priorityList) {
+        const seat = availableSeats.find(s => s.number === prioritySeatNum);
+        if (seat) {
+            console.log(`[selectSeatByPriority] Selected seat ${seat.number} (in priority list)`);
+            return seat;
+        }
+    }
+
+    // اگر هیچ کدام از اولویت‌ها موجود نبود، اولین صندلی‌ موجود رو انتخاب می‌کنیم
+    const selectedSeat = availableSeats[0];
+    console.log(`[selectSeatByPriority] No priority seats available, selected seat ${selectedSeat.number}`);
+    return selectedSeat;
+}
 function extractCsrfSeatAndUser(html, seatNumber) {
     const $ = cheerio.load(html);
     const token = $("input[name='__RequestVerificationToken']").val() || "";
-    const seatDiv = $("div.block").filter((i, el) => $(el).text().trim() === String(seatNumber)).first();
-    const seatId = seatDiv.attr("id");
+
+    // تمام صندلی‌های موجود رو پیدا می‌کنیم
+    const allSeats = [];
+    $("div.block").each((i, el) => {
+        const $seat = $(el);
+        const seatText = $seat.text().trim();
+        const seatId = $seat.attr("id");
+        const classes = $seat.attr("class") || "";
+
+        // بررسی وضعیت: اگر کلاس شامل "disable" یا "unavailable" باشه یعنی قفل شده
+        const isAvailable = !classes.includes("disable") && !classes.includes("unavailable");
+
+        if (seatText && seatId) {
+            allSeats.push({
+                number: parseInt(seatText, 10),
+                id: seatId,
+                available: isAvailable,
+                classes: classes
+            });
+        }
+    });
+
+    // صندلی مورد نظر رو پیدا می‌کنیم
+    const selectedSeat = allSeats.find(s => s.number === seatNumber);
+
+    if (!token) throw new Error("CSRF token not found");
+    if (!selectedSeat) throw new Error(`Seat ${seatNumber} not found in HTML`);
+    if (!selectedSeat.available) throw new Error(`Seat ${seatNumber} is not available (class: ${selectedSeat.classes})`);
+
     let userId = "";
     const scripts = $("script").map((i, el) => $(el).html() || "").get().join("\n");
     const m = scripts.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
     if (m) userId = m[0];
-    if (!token) throw new Error("CSRF token not found");
-    if (!seatId) throw new Error(`Seat ${seatNumber} not found`);
-    return { token, seatId, userId };
+
+    return {
+        token,
+        seatId: selectedSeat.id,
+        userId,
+        allSeats  // همه صندلی‌ها رو هم برمی‌گردانیم برای اولویت‌بندی
+    };
 }
 async function reserveOnce(client, store, dateInfo, label) {
     try {
         console.log(`[reserveOnce] Starting reservation for ${label}...`);
         const html = await openSeatPopupHTML(client, store, dateInfo, label);
-        const { token, seatId, userId } = extractCsrfSeatAndUser(html, store.seat_number);
+        const { token, allSeats, userId } = extractCsrfSeatAndUser(html, store.seat_number);
+
+        // اولویت صندلی‌ها رو از store میگیریم (یا دفلت رو استفاده می‌کنیم)
+        const seatPriority = store.seat_priority || [33, 32, 34, 37, 42];
+        const selectedSeat = selectSeatByPriority(allSeats, seatPriority);
+
         const w = TIME_WINDOWS[label];
         const payload = new URLSearchParams({
             __RequestVerificationToken: token,
-            Id: seatId,
+            Id: selectedSeat.id,
             date: dateInfo.fullDateString,
             SHour: String(w.start),
             THour: String(w.end),
             userId: userId || ""
         }).toString();
 
-        console.log(`[reserveOnce] Posting reservation...`);
+        console.log(`[reserveOnce] Posting reservation for seat ${selectedSeat.number}...`);
         const res = await client.post(`https://110129.samanpl.ir/Common/Portal/ReservesLibraryNew`, payload, {
             headers: {
                 "Content-Type": "application/x-www-form-urlencoded",
@@ -206,50 +274,101 @@ async function reserveOnce(client, store, dateInfo, label) {
         throw e;
     }
 }
-async function reserveSeatFlow(store, labels) {
-    const client = buildClient();
-    await login(client, store);
-    const dateInfo = computeReserveDate(store.reserveDateMode);
-    const results = [];
-    for (const label of labels) {
-        try {
-            const r = await reserveOnce(client, store, dateInfo, label);
-            const success = !!r.Success;
-            const message = r.Message || "";
+// Helper: run tasks (functions returning promises) with limited concurrency
+async function runWithConcurrency(tasks, concurrency) {
+    const results = new Array(tasks.length);
+    let idx = 0;
 
-            results.push({ label, success, message });
-
-            // ثبت لاگ
-            logReservation({
-                date: dateInfo.iso,
-                window: label,
-                status: success ? "success" : "failed",
-                message: message,
-                timestamp: new Date().toISOString()
-            });
-
-            // small jitter
-            await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
-        } catch (e) {
-            results.push({ label, success: false, message: e.message });
-
-            // ثبت خطا در لاگ
-            logReservation({
-                date: dateInfo.iso,
-                window: label,
-                status: "failed",
-                message: "",
-                error: e.message,
-                timestamp: new Date().toISOString()
-            });
+    async function worker() {
+        while (true) {
+            const i = idx++;
+            if (i >= tasks.length) return;
+            try {
+                results[i] = await tasks[i]();
+            } catch (e) {
+                results[i] = { error: e };
+            }
         }
     }
+
+    const workers = [];
+    const n = Math.max(1, Math.min(concurrency, tasks.length));
+    for (let i = 0; i < n; i++) workers.push(worker());
+    await Promise.all(workers);
+    return results;
+}
+
+async function reserveSeatFlow(store, labels) {
+    // ensure global client exists
+    if (!GLOBAL_CLIENT) GLOBAL_CLIENT = buildClient();
+
+    // attempt login once (refresh client on failure)
+    try {
+        await login(GLOBAL_CLIENT, store);
+    } catch (e) {
+        console.log("[reserveSeatFlow] Login failed, retrying with fresh client...");
+        GLOBAL_CLIENT = buildClient();
+        await login(GLOBAL_CLIENT, store);
+    }
+
+    const dateInfo = computeReserveDate(store.reserveDateMode);
+
+    // Concurrency and spread come from store (safe defaults in defaultStore)
+    const concurrency = parseInt(store.concurrency || store.concurrency === 0 ? store.concurrency : store.concurrency) || store.concurrency || 3;
+    const requestStartSpreadMs = parseInt(store.requestStartSpreadMs || store.requestStartSpreadMs === 0 ? store.requestStartSpreadMs : store.requestStartSpreadMs) || store.requestStartSpreadMs || 400;
+
+    // Build task functions for each label
+    const tasks = labels.map(label => {
+        return async () => {
+            // small randomized stagger before starting to avoid a single burst
+            const startDelay = Math.floor(Math.random() * requestStartSpreadMs);
+            await new Promise(r => setTimeout(r, startDelay));
+
+            // basic retry strategy (1 retry) with small backoff
+            const maxAttempts = 2;
+            let attempt = 0;
+            let lastError = null;
+            while (attempt < maxAttempts) {
+                attempt++;
+                try {
+                    const r = await reserveOnce(GLOBAL_CLIENT, store, dateInfo, label);
+                    return { label, success: !!r.Success, message: r.Message || "", raw: r };
+                } catch (e) {
+                    lastError = e;
+                    // small backoff before retry
+                    const backoff = 200 + attempt * 200 + Math.floor(Math.random() * 200);
+                    await new Promise(r => setTimeout(r, backoff));
+                }
+            }
+            // all attempts failed
+            throw lastError || new Error("Unknown reservation error");
+        };
+    });
+
+    // run with controlled concurrency
+    const taskResults = await runWithConcurrency(tasks, concurrency);
+
+    const results = [];
+    for (const tr of taskResults) {
+        if (tr && tr.error) {
+            const err = tr.error;
+            results.push({ label: err.label || "?", success: false, message: err.message || String(err) });
+            logReservation({ date: dateInfo.iso, window: err.label || "?", status: "failed", message: "", error: err.message || String(err), timestamp: new Date().toISOString() });
+        } else if (tr) {
+            results.push({ label: tr.label, success: tr.success, message: tr.message });
+            logReservation({ date: dateInfo.iso, window: tr.label, status: tr.success ? "success" : "failed", message: tr.message || "", timestamp: new Date().toISOString() });
+        } else {
+            results.push({ label: "?", success: false, message: "Unknown result" });
+        }
+    }
+
     // optional: parse quota from messages
     const quotaMsg = results.find(x => x.success && /سهم|باقی مانده/.test(x.message));
     if (quotaMsg) {
         store.lastMonthQuota = quotaMsg.message;
         writeStore(store);
     }
+
     return { dateInfo, results };
 }
 
@@ -302,6 +421,9 @@ app.get("/api/config", (req, res) => {
         username: st.username,
         passwd: st.passwd,
         seat_number: st.seat_number,
+        seat_priority: st.seat_priority || [33, 32, 34, 37, 42],
+        concurrency: st.concurrency || 5,
+        requestStartSpreadMs: st.requestStartSpreadMs || 400,
         sc: st.sc,
         reserveDateMode: st.reserveDateMode,
         selectedWindows: st.selectedWindows || [],
@@ -310,12 +432,15 @@ app.get("/api/config", (req, res) => {
     });
 });
 
-// Update main config (seat_number, reserveDateMode, selectedWindows)
+// Update main config (seat_number, seat_priority, reserveDateMode, selectedWindows)
 app.post("/api/config", (req, res) => {
     const st = readStore();
-    const { seat_number, reserveDateMode, selectedWindows } = req.body || {};
+    const { seat_number, seat_priority, reserveDateMode, selectedWindows, concurrency, requestStartSpreadMs } = req.body || {};
 
     if (seat_number) st.seat_number = parseInt(seat_number, 10);
+    if (Array.isArray(seat_priority)) st.seat_priority = seat_priority.map(s => parseInt(s, 10));
+    if (typeof concurrency !== 'undefined') st.concurrency = parseInt(concurrency, 10) || st.concurrency;
+    if (typeof requestStartSpreadMs !== 'undefined') st.requestStartSpreadMs = parseInt(requestStartSpreadMs, 10) || st.requestStartSpreadMs;
     if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) st.reserveDateMode = reserveDateMode;
     if (Array.isArray(selectedWindows)) st.selectedWindows = selectedWindows.filter(w => TIME_WINDOWS[w]);
 
@@ -326,11 +451,14 @@ app.post("/api/config", (req, res) => {
 // Update advanced settings (username, password, sc, etc)
 app.post("/api/settings", (req, res) => {
     const st = readStore();
-    const { username, passwd, seat_number, sc, reserveDateMode } = req.body || {};
+    const { username, passwd, seat_number, seat_priority, sc, reserveDateMode, concurrency, requestStartSpreadMs } = req.body || {};
 
     if (username) st.username = username;
     if (passwd) st.passwd = passwd;
     if (seat_number) st.seat_number = parseInt(seat_number, 10);
+    if (Array.isArray(seat_priority)) st.seat_priority = seat_priority.map(s => parseInt(s, 10));
+    if (typeof concurrency !== 'undefined') st.concurrency = parseInt(concurrency, 10) || st.concurrency;
+    if (typeof requestStartSpreadMs !== 'undefined') st.requestStartSpreadMs = parseInt(requestStartSpreadMs, 10) || st.requestStartSpreadMs;
     if (sc) st.sc = sc;
     if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) st.reserveDateMode = reserveDateMode;
 
