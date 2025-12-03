@@ -172,6 +172,7 @@ async function openSeatPopupHTML(client, store, dateInfo, label) {
 
 // انتخاب صندلی بر اساس اولویت
 function selectSeatByPriority(allSeats, priorityList) {
+
     // ابتدا صندلی‌های موجود رو فیلتر می‌کنیم
     const availableSeats = allSeats.filter(s => s.available);
 
@@ -206,8 +207,7 @@ function extractCsrfSeatAndUser(html, seatNumber) {
         const classes = $seat.attr("class") || "";
 
         // بررسی وضعیت: اگر کلاس شامل "disable" یا "unavailable" باشه یعنی قفل شده
-        const isAvailable = !classes.includes("disable") && !classes.includes("unavailable");
-
+        const isAvailable = !classes.includes("reserve");
         if (seatText && seatId) {
             allSeats.push({
                 number: parseInt(seatText, 10),
@@ -218,12 +218,9 @@ function extractCsrfSeatAndUser(html, seatNumber) {
         }
     });
 
-    // صندلی مورد نظر رو پیدا می‌کنیم
-    const selectedSeat = allSeats.find(s => s.number === seatNumber);
+    console.log(allSeats)
 
     if (!token) throw new Error("CSRF token not found");
-    if (!selectedSeat) throw new Error(`Seat ${seatNumber} not found in HTML`);
-    if (!selectedSeat.available) throw new Error(`Seat ${seatNumber} is not available (class: ${selectedSeat.classes})`);
 
     let userId = "";
     const scripts = $("script").map((i, el) => $(el).html() || "").get().join("\n");
@@ -232,9 +229,8 @@ function extractCsrfSeatAndUser(html, seatNumber) {
 
     return {
         token,
-        seatId: selectedSeat.id,
+        allSeats,  // همه صندلی‌ها رو هم برمی‌گردانیم برای اولویت‌بندی
         userId,
-        allSeats  // همه صندلی‌ها رو هم برمی‌گردانیم برای اولویت‌بندی
     };
 }
 async function reserveOnce(client, store, dateInfo, label) {
@@ -244,7 +240,7 @@ async function reserveOnce(client, store, dateInfo, label) {
         const { token, allSeats, userId } = extractCsrfSeatAndUser(html, store.seat_number);
 
         // اولویت صندلی‌ها رو از store میگیریم (یا دفلت رو استفاده می‌کنیم)
-        const seatPriority = store.seat_priority || [33, 32, 34, 37, 42];
+        const seatPriority = store.seat_priority;
         const selectedSeat = selectSeatByPriority(allSeats, seatPriority);
 
         const w = TIME_WINDOWS[label];
