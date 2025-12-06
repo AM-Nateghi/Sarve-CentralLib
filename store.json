@@ -9,13 +9,14 @@
     37,
     42
   ],
-  "concurrency": 3,
+  "concurrency": 5,
   "requestStartSpreadMs": 400,
   "sc": "ktDKKeFZe5lkOhWTITfdmQ==",
   "reserveDateMode": "today",
   "selectedWindows": [
-    "17-20",
-    "20-21"
+    "8-11",
+    "11-14",
+    "14-17"
   ],
   "scheduledDays": {
     "2025-11-26": [
