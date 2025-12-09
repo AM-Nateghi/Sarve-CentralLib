@@ -1,5 +1,5 @@
 // server.js
-// Install: npm install express cors body-parser dayjs fs axios tough-cookie axios-cookiejar-support cheerio
+// Install: npm install express cors body-parser dayjs fs axios tough-cookie axios-cookiejar-support cheerio node-cron mysql2
 // Run: node server.js
 
 const express = require("express");
@@ -11,6 +11,7 @@ const tough = require("tough-cookie");
 const { wrapper } = require("axios-cookiejar-support");
 const cheerio = require("cheerio");
 const { initDatabase, logReservation, getHistory, getHistoryByDate, readStore, writeStore } = require("./db");
+const { startScheduler } = require("./scheduler");
 
 // -------------------- Persian date helper (very lightweight) --------------------
 function toJalaliString(d) {
@@ -317,13 +318,29 @@ async function reserveSeatFlow(store, labels) {
     for (const tr of taskResults) {
         if (tr && tr.error) {
             const err = tr.error;
-            results.push({ label: err.label || "?", success: false, message: err.message || String(err) });
-            logReservation({ date: dateInfo.iso, window: err.label || "?", status: "failed", message: "", error: err.message || String(err), timestamp: new Date().toISOString() });
+            const windowLabel = err.label || "unknown";
+            results.push({ label: windowLabel, success: false, message: err.message || String(err) });
+            await logReservation({ 
+                date: dateInfo.iso, 
+                window: windowLabel, 
+                status: "failed", 
+                message: "", 
+                error: err.message || String(err), 
+                timestamp: new Date().toISOString(),
+                jalaliDate: toJalaliString(new Date(dateInfo.iso))
+            });
         } else if (tr) {
             results.push({ label: tr.label, success: tr.success, message: tr.message });
-            logReservation({ date: dateInfo.iso, window: tr.label, status: tr.success ? "success" : "failed", message: tr.message || "", timestamp: new Date().toISOString() });
+            await logReservation({ 
+                date: dateInfo.iso, 
+                window: tr.label || "unknown", 
+                status: tr.success ? "success" : "failed", 
+                message: tr.message || "", 
+                timestamp: new Date().toISOString(),
+                jalaliDate: toJalaliString(new Date(dateInfo.iso))
+            });
         } else {
-            results.push({ label: "?", success: false, message: "Unknown result" });
+            results.push({ label: "unknown", success: false, message: "Unknown result" });
         }
     }
 
@@ -442,7 +459,20 @@ app.post("/api/schedule-day", async (req, res) => {
         // Delete if empty
         delete st.scheduledDays[date];
     } else {
-        st.scheduledDays[date] = windows.filter(w => TIME_WINDOWS[w]);
+        const validWindows = windows.filter(w => TIME_WINDOWS[w]);
+        st.scheduledDays[date] = validWindows;
+        
+        // Log scheduled status for each window
+        for (const w of validWindows) {
+            await logReservation({
+                date: date,
+                window: w,
+                status: "scheduled",
+                message: "تایم‌بندی شده برای اجرای خودکار",
+                timestamp: new Date().toISOString(),
+                jalaliDate: toJalaliString(new Date(date))
+            });
+        }
     }
 
     await writeStore(st);
@@ -491,6 +521,18 @@ const port = process.env.PORT || 3000;
     try {
         await initDatabase();
         console.log('[DB] Database initialized');
+        
+        // شروع task scheduler
+        const scheduler = startScheduler(
+            null,
+            reserveSeatFlow,
+            readStore,
+            writeStore,
+            logReservation,
+            toJalaliString
+        );
+        console.log('[Scheduler] Task scheduler started');
+        
         app.listen(port, () => console.log(`Anti-Kokh listening on http://localhost:${port}`));
     } catch (error) {
         console.error('[DB] Failed to start:', error.message);

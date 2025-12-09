@@ -439,18 +439,41 @@
             emptyMsg.style.display = "none";
 
             entries.forEach(entry => {
-                const statusIcon = entry.status === "success" ? "✅" : "❌";
-                const statusColor = entry.status === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700";
-                const time = new Date(entry.timestamp).toLocaleTimeString("fa-IR");
+                let statusIcon, statusColor, statusText;
+                
+                if (entry.status === "success") {
+                    statusIcon = "✅";
+                    statusColor = "bg-green-50 text-green-700";
+                    statusText = "موفق";
+                } else if (entry.status === "failed") {
+                    statusIcon = "❌";
+                    statusColor = "bg-red-50 text-red-700";
+                    statusText = "ناموفق";
+                } else if (entry.status === "scheduled") {
+                    statusIcon = "📅";
+                    statusColor = "bg-blue-50 text-blue-700";
+                    statusText = "تایم‌بندی شده";
+                } else {
+                    statusIcon = "❓";
+                    statusColor = "bg-slate-50 text-slate-700";
+                    statusText = "نامعلوم";
+                }
+                
+                // تبدیل timestamp به ساعت تهران (UTC+3:30)
+                const timestamp = new Date(entry.timestamp);
+                const tehranTime = new Date(timestamp.getTime() + (3.5 * 60 * 60 * 1000) - timestamp.getTimezoneOffset() * 60000);
+                const time = tehranTime.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                
+                const date = entry.date || entry.jalaliDate || "—";
                 const message = entry.message || entry.error || "—";
 
                 tbody.insertAdjacentHTML("beforeend", `
           <tr class="hover:bg-slate-50 transition">
-            <td class="py-3 text-right text-sm">${entry.jalaliDate}</td>
-            <td class="py-3 text-right text-sm font-mono">${entry.window}</td>
+            <td class="py-3 text-right text-sm">${date}</td>
+            <td class="py-3 text-right text-sm font-mono">${entry.window || "—"}</td>
             <td class="py-3 text-right">
               <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusColor}">
-                ${statusIcon} ${entry.status === "success" ? "موفق" : "ناموفق"}
+                ${statusIcon} ${statusText}
               </span>
             </td>
             <td class="py-3 text-right text-xs text-slate-600 max-w-xs truncate" title="${message}">${message}</td>

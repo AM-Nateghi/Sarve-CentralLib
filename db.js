@@ -35,17 +35,18 @@ async function initDatabase() {
         await connection.query(`
             CREATE TABLE IF NOT EXISTS reservation_logs (
                 id INT PRIMARY KEY AUTO_INCREMENT,
-                entry_id VARCHAR(100) UNIQUE NOT NULL,
+                entry_id VARCHAR(100),
                 date DATE NOT NULL,
-                window VARCHAR(20) NOT NULL,
-                status ENUM('success', 'failed') NOT NULL,
+                window VARCHAR(20),
+                status ENUM('success', 'failed', 'scheduled') NOT NULL,
                 message TEXT,
                 error TEXT,
                 timestamp DATETIME NOT NULL,
                 jalali_date VARCHAR(20),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 INDEX idx_date (date),
-                INDEX idx_status (status)
+                INDEX idx_status (status),
+                INDEX idx_entry (entry_id)
             )
         `);
 
