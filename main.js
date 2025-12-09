@@ -45,7 +45,7 @@ const defaultStore = {
     seat_priority: [33, 32, 34, 37, 42],
     // How many concurrent reserve requests to run after a single login.
     // Keep this small to avoid overloading the server. Default 3.
-    concurrency: 10,
+    concurrency: 3,
     // Maximum random spread (ms) to stagger request start times to avoid bursts.
     requestStartSpreadMs: 400,
     sc: "ktDKKeFZe5lkOhWTITfdmQ==",

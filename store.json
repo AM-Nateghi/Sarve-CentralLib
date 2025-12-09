@@ -12,7 +12,7 @@
   "concurrency": 5,
   "requestStartSpreadMs": 400,
   "sc": "ktDKKeFZe5lkOhWTITfdmQ==",
-  "reserveDateMode": "today",
+  "reserveDateMode": "tomorrow",
   "selectedWindows": [
     "8-11",
     "11-14",
@@ -57,7 +57,12 @@
       "14-17",
       "17-20",
       "20-21"
+    ],
+    "2025-12-08": [
+      "8-11",
+      "11-14",
+      "14-17"
     ]
   },
-  "lastMonthQuota": " با موفقیت ثبت شد. تعداد باقی مانده از سهم رزرو شما در ماه  193  می باشد "
+  "lastMonthQuota": " با موفقیت ثبت شد. تعداد باقی مانده از سهم رزرو شما در ماه  170  می باشد "
 }
