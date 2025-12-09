@@ -122,6 +122,11 @@
                             class="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-105 active:scale-95">
                             🚀 رزرو فوری
                         </button>
+                        <button id="gambleBtn"
+                            class="flex-1 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-105 active:scale-95"
+                            title="شنگول بازی - تست خارج از ساعت‌های مجاز">
+                            🎲 شنگول بازی
+                        </button>
                         <button id="saveConfigBtn"
                             class="rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-900 px-5 py-3 font-bold transition">
                             💾 ذخیره
@@ -321,9 +326,46 @@
         <div id="toastMessage"></div>
     </div>
 
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script>
         const TIME_WINDOWS = ["8-11", "11-14", "14-17", "17-20", "20-21"];
         let currentEditDay = null;
+        let socket = null;
+
+        // ==================== WebSocket Setup ====================
+        function initWebSocket() {
+            socket = io();
+            
+            socket.on("connect", () => {
+                console.log("[WebSocket] Connected:", socket.id);
+            });
+            
+            socket.on("reserve:start", (data) => {
+                console.log("[WebSocket] Reserve started:", data);
+                showToast(`🚀 شروع رزرو برای ${data.windows.join(", ")}`, true);
+            });
+            
+            socket.on("reserve:complete", (data) => {
+                console.log("[WebSocket] Reserve complete:", data);
+                loadHistory();
+                showToast(`✅ رزرو تکمیل شد`, true);
+            });
+            
+            socket.on("test-reserve:start", (data) => {
+                console.log("[WebSocket] Test reserve started:", data);
+                showToast(`🎲 شنگول بازی برای ${data.windows.join(", ")} در ${data.date}`, true);
+            });
+            
+            socket.on("test-reserve:complete", (data) => {
+                console.log("[WebSocket] Test reserve complete:", data);
+                loadHistory();
+                showToast(`✅ شنگول بازی تکمیل شد`, true);
+            });
+            
+            socket.on("disconnect", () => {
+                console.log("[WebSocket] Disconnected");
+            });
+        }
 
         // ==================== Modal & Toast Helpers ====================
         function showModal(modalId) {
@@ -696,6 +738,51 @@
             }
         }
 
+        // شنگول بازی (test reserve)
+        async function gamblerTime() {
+            if (!currentEditDay) {
+                showToast("لطفاً ابتدا روزی را برای شنگول بازی انتخاب کنید", false);
+                return;
+            }
+
+            const wraps = document.querySelectorAll("#dayEditWindowsWrap label");
+            const selected = Array.from(wraps)
+                .filter(w => w.querySelector("input[type='checkbox']").checked)
+                .map(w => w.querySelector("span").innerText);
+
+            if (!selected.length) {
+                showToast("لطفاً حداقل یک بازه را انتخاب کنید", false);
+                return;
+            }
+
+            const btn = document.getElementById("gambleBtn");
+            btn.disabled = true;
+            btn.innerHTML = "⏳ شنگول در حال...";
+
+            try {
+                const r = await fetch("/api/test-reserve", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ date: currentEditDay, windows: selected })
+                });
+                const data = await r.json();
+
+                if (data.ok && data.results) {
+                    const successes = data.results.filter(x => x.success).length;
+                    const total = data.results.length;
+                    showToast(`🎲 نتیجه شنگول: ${successes}/${total} موفق`, successes > 0);
+                    loadHistory();
+                } else {
+                    showToast(data.error || "خطا در شنگول بازی", false);
+                }
+            } catch (e) {
+                showToast("خطا: " + e.message, false);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "🎲 شنگول بازی";
+            }
+        }
+
         // ==================== Event Listeners ====================
         document.getElementById("openSettingsBtn").addEventListener("click", () => showModal("settingsModal"));
         document.getElementById("closeSettingsBtn").addEventListener("click", () => hideModal("settingsModal"));
@@ -703,6 +790,7 @@
 
         document.getElementById("saveConfigBtn").addEventListener("click", saveMainConfig);
         document.getElementById("reserveNowBtn").addEventListener("click", reserveNow);
+        document.getElementById("gambleBtn").addEventListener("click", gamblerTime);
         document.getElementById("saveSettingsBtn").addEventListener("click", saveAdvancedSettings);
         document.getElementById("saveDayEditBtn").addEventListener("click", saveDayEdit);
         document.getElementById("deleteDayEditBtn").addEventListener("click", deleteDay);
@@ -715,7 +803,8 @@
             if (e.target.id === "dayEditModal") hideModal("dayEditModal");
         });
 
-        // Initial load
+        // Initial load and WebSocket
+        initWebSocket();
         loadConfig();
         loadHistory();
         setInterval(loadConfig, 30000); // Refresh config every 30 seconds

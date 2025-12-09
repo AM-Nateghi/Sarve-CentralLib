@@ -12,6 +12,10 @@ const { wrapper } = require("axios-cookiejar-support");
 const cheerio = require("cheerio");
 const { initDatabase, logReservation, getHistory, getHistoryByDate, readStore, writeStore } = require("./db");
 const { startScheduler } = require("./scheduler");
+const { Server } = require("socket.io");
+
+// Global WebSocket instance
+let io = null;
 
 // -------------------- Persian date helper (very lightweight) --------------------
 function toJalaliString(d) {
@@ -394,7 +398,23 @@ app.get("/", (req, res) => {
     res.sendFile(__dirname + "/public/index.html");
 });
 
-// ==================== API Routes ====================
+// ==================== WebSocket Setup ====================
+// Socket.io will be initialized after server starts
+function initSocketIO(httpServer) {
+    io = new Server(httpServer, {
+        cors: { origin: "*", methods: ["GET", "POST"] }
+    });
+
+    io.on("connection", (socket) => {
+        console.log(`[WebSocket] Client connected: ${socket.id}`);
+        
+        socket.on("disconnect", () => {
+            console.log(`[WebSocket] Client disconnected: ${socket.id}`);
+        });
+    });
+
+    return io;
+}
 
 // Get full config
 app.get("/api/config", async (req, res) => {
@@ -485,7 +505,15 @@ app.post("/api/reserve", async (req, res) => {
         const st = await readStore();
         const windows = Array.isArray(req.body.windows) ? req.body.windows.filter(w => TIME_WINDOWS[w]) : (st.selectedWindows || []);
         if (!windows.length) return res.status(400).json({ ok: false, error: "No windows selected" });
+        
+        // ارسال شروع رزرو به کلاینت‌ها
+        if (io) io.emit("reserve:start", { date: new Date().toISOString(), windows });
+        
         const { results, dateInfo } = await reserveSeatFlow(st, windows);
+        
+        // ارسال نتایج
+        if (io) io.emit("reserve:complete", { dateInfo, results });
+        
         // Mark scheduledDays for the date
         const key = dateInfo.iso;
         st.scheduledDays[key] = windows;
@@ -510,11 +538,82 @@ app.get("/api/history/:date", async (req, res) => {
     res.json({ ok: true, entries: history });
 });
 
+// Test/Gamble reserve (شنگول بازی) - بدون توجه به محدودیت‌های زمانی
+app.post("/api/test-reserve", async (req, res) => {
+    try {
+        const st = await readStore();
+        const { date, windows } = req.body || {};
+        
+        if (!date || !Array.isArray(windows) || windows.length === 0) {
+            return res.status(400).json({ ok: false, error: "date and windows required" });
+        }
+        
+        // اطلاع به کلاینت‌ها (شنگول بازی شروع شد)
+        if (io) io.emit("test-reserve:start", { date, windows });
+        
+        // ساختار dateInfo برای تاریخ دلخواه
+        const dateInfo = {
+            iso: date,
+            shamsi: date // می‌توان بهتر تبدیل کرد
+        };
+        
+        // اجرا با windows دلخواه
+        const results = [];
+        const concurrency = st.concurrency || 3;
+        
+        // Create tasks for each window
+        const tasks = windows.map(label => async () => {
+            try {
+                return await reserveOnce(st, dateInfo, label);
+            } catch (error) {
+                return { label, success: false, message: error.message };
+            }
+        });
+        
+        const taskResults = await runWithConcurrency(tasks, concurrency);
+        
+        for (const tr of taskResults) {
+            if (tr && tr.error) {
+                const err = tr.error;
+                const windowLabel = err.label || "unknown";
+                results.push({ label: windowLabel, success: false, message: err.message || String(err) });
+                await logReservation({
+                    date: date,
+                    window: windowLabel,
+                    status: "failed",
+                    message: "(test)",
+                    error: err.message || String(err),
+                    timestamp: new Date().toISOString(),
+                    jalaliDate: toJalaliString(new Date(date))
+                });
+            } else if (tr) {
+                results.push({ label: tr.label, success: tr.success, message: tr.message });
+                await logReservation({
+                    date: date,
+                    window: tr.label || "unknown",
+                    status: tr.success ? "success" : "failed",
+                    message: "(test) " + (tr.message || ""),
+                    timestamp: new Date().toISOString(),
+                    jalaliDate: toJalaliString(new Date(date))
+                });
+            }
+        }
+        
+        // ارسال نتایج
+        if (io) io.emit("test-reserve:complete", { dateInfo, results });
+        
+        res.json({ ok: true, date, results });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // Health check
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 // Start
 const port = process.env.PORT || 3000;
+const http = require('http');
 
 // Initialize database and start server
 (async () => {
@@ -522,18 +621,21 @@ const port = process.env.PORT || 3000;
         await initDatabase();
         console.log('[DB] Database initialized');
         
+        // ایجاد HTTP server برای Socket.io
+        const httpServer = http.createServer(app);
+        initSocketIO(httpServer);
+        
         // شروع task scheduler
         const scheduler = startScheduler(
             null,
             reserveSeatFlow,
             readStore,
             writeStore,
-            logReservation,
-            toJalaliString
+            logReservation
         );
         console.log('[Scheduler] Task scheduler started');
         
-        app.listen(port, () => console.log(`Anti-Kokh listening on http://localhost:${port}`));
+        httpServer.listen(port, () => console.log(`Anti-Kokh listening on http://localhost:${port}`));
     } catch (error) {
         console.error('[DB] Failed to start:', error.message);
         process.exit(1);
