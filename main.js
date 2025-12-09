@@ -61,6 +61,11 @@ const TIME_WINDOWS = {
 function computeReserveDate(mode) {
     const now = dayjs();
     const target = mode === "tomorrow" ? now.add(1, "day") : now;
+    return computeReserveDateFromISO(target.format("YYYY-MM-DD"));
+}
+
+function computeReserveDateFromISO(isoDate) {
+    const target = dayjs(isoDate);
     const mm = String(target.month() + 1).padStart(2, "0");
     const dd = String(target.date()).padStart(2, "0");
     const yyyy = String(target.year());
@@ -281,23 +286,23 @@ async function runWithConcurrency(tasks, concurrency) {
     return results;
 }
 
-async function reserveSeatFlow(store, labels, runId) {
+async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null) {
     // ensure global client exists
     if (!GLOBAL_CLIENT) GLOBAL_CLIENT = buildClient();
 
     // attempt login once (refresh client on failure)
     try {
-        emitProgress(runId, "login", 0, 5, "شروع لاگین");
+        emitProgress(runId, "login", 0, 3, "شروع لاگین");
         await login(GLOBAL_CLIENT, store);
-        emitProgress(runId, "login", 1, 5, "لاگین موفق");
+        emitProgress(runId, "login", 3, 3, "لاگین موفق", "done");
     } catch (e) {
         console.log("[reserveSeatFlow] Login failed, retrying with fresh client...");
         GLOBAL_CLIENT = buildClient();
         await login(GLOBAL_CLIENT, store);
-        emitProgress(runId, "login", 1, 5, "لاگین مجدد موفق");
+        emitProgress(runId, "login", 3, 3, "لاگین مجدد موفق", "done");
     }
 
-    const dateInfo = computeReserveDate(store.reserveDateMode);
+    const dateInfo = dateInfoOverride || computeReserveDate(store.reserveDateMode);
 
     // Concurrency and spread come from store (safe defaults in defaultStore)
     const concurrency = parseInt(store.concurrency || store.concurrency === 0 ? store.concurrency : store.concurrency) || store.concurrency || 3;
@@ -571,58 +576,10 @@ app.post("/api/test-reserve", async (req, res) => {
         
         // اطلاع به کلاینت‌ها (شنگول بازی شروع شد)
         if (io) io.emit("test-reserve:start", { runId, date, windows });
-        
-        // ساختار dateInfo برای تاریخ دلخواه
-        const dateInfo = {
-            iso: date,
-            shamsi: date // می‌توان بهتر تبدیل کرد
-        };
-        
-        // اجرا با windows دلخواه
-        const results = [];
-        const concurrency = st.concurrency || 3;
-        
-        // Create tasks for each window
-        const tasks = windows.map(label => async () => {
-            try {
-                return await reserveOnce(st, dateInfo, label);
-            } catch (error) {
-                return { label, success: false, message: error.message };
-            }
-        });
-        
-        const taskResults = await runWithConcurrency(tasks, concurrency);
-        
-        for (const tr of taskResults) {
-            if (tr && tr.error) {
-                const err = tr.error;
-                const windowLabel = err.label || "unknown";
-                results.push({ label: windowLabel, success: false, message: err.message || String(err) });
-                await logReservation({
-                    date: date,
-                    window: windowLabel,
-                    status: "failed",
-                    message: "(test)",
-                    error: err.message || String(err),
-                    timestamp: new Date().toISOString(),
-                    jalaliDate: toJalaliString(dayjs(date))
-                });
-            } else if (tr) {
-                results.push({ label: tr.label, success: tr.success, message: tr.message });
-                await logReservation({
-                    date: date,
-                    window: tr.label || "unknown",
-                    status: tr.success ? "success" : "failed",
-                    message: "(test) " + (tr.message || ""),
-                    timestamp: new Date().toISOString(),
-                    jalaliDate: toJalaliString(dayjs(date))
-                });
-            }
-        }
-        
-        // ارسال نتایج
-        if (io) io.emit("test-reserve:complete", { runId, dateInfo, results });
-        
+        const dateInfo = computeReserveDateFromISO(date);
+        const { results, dateInfo: usedDateInfo } = await reserveSeatFlow(st, windows, runId, dateInfo);
+
+        if (io) io.emit("test-reserve:complete", { runId, dateInfo: usedDateInfo, results });
         res.json({ ok: true, runId, date, results });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });

@@ -77,6 +77,60 @@
             -webkit-user-select: none;
             user-select: none;
         }
+
+        /* Shimmer loading for progress bars */
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        .shimmer-bar {
+            background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 40%, #e2e8f0 80%);
+            background-size: 200% 100%;
+            animation: shimmer 1.2s linear infinite;
+        }
+
+        /* Progress toast container & card */
+        #progressToastContainer {
+            z-index: 60;
+        }
+
+        .progress-toast {
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+        }
+
+        /* History collapse */
+        #historyWrapper {
+            transition: max-height 0.25s ease;
+        }
+
+        /* Mobile tweaks */
+        @media (max-width: 640px) {
+            body {
+                padding: 0 10px;
+            }
+            header h1 {
+                font-size: 1.75rem;
+            }
+            header p {
+                font-size: 0.9rem;
+            }
+            .main-actions {
+                flex-direction: column;
+            }
+            .main-actions button {
+                width: 100%;
+            }
+            table th, table td {
+                font-size: 0.8rem;
+                white-space: nowrap;
+            }
+            #progressToastContainer {
+                left: 0.5rem;
+                right: 0.5rem;
+                width: auto;
+            }
+        }
     </style>
 </head>
 
@@ -119,7 +173,7 @@
                         </div>
                     </div>
 
-                    <div class="flex gap-3">
+                    <div class="flex gap-3 main-actions flex-col sm:flex-row">
                         <button id="reserveNowBtn"
                             class="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-105 active:scale-95">
                             🚀 رزرو فوری
@@ -171,9 +225,12 @@
                 <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
                     <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
                         <h2 class="text-xl font-bold">📋 تاریخچه رزروها</h2>
-                        <span class="text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full">۵۰ ورودی اخیر</span>
+                        <div class="flex items-center gap-2">
+                            <span class="hidden sm:inline text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full">۵۰ ورودی اخیر</span>
+                            <button id="toggleHistoryBtn" class="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition" type="button">نمایش بیشتر</button>
+                        </div>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div id="historyWrapper" class="overflow-x-auto max-h-80 sm:max-h-96 overflow-y-auto rounded-xl border border-slate-100">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b border-slate-200">
@@ -352,6 +409,7 @@
     </div>
 
     <!-- Toast Notification -->
+    <div id="progressToastContainer" class="fixed bottom-4 left-4 w-72 sm:w-80 flex flex-col gap-3 pointer-events-none"></div>
     <div id="toast"
         class="fixed bottom-4 right-4 max-w-sm bg-slate-900 text-white px-6 py-3 rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity">
         <div id="toastMessage"></div>
@@ -363,6 +421,7 @@
         let currentEditDay = null;
         let gambleSelectedDate = null;
         let socket = null;
+        let historyExpanded = false;
 
         // ==================== WebSocket Setup ====================
         function initWebSocket() {
@@ -430,6 +489,20 @@
             modal.classList.add("opacity-0", "pointer-events-none");
         }
 
+        function toggleHistory() {
+            const wrap = document.getElementById("historyWrapper");
+            historyExpanded = !historyExpanded;
+            if (historyExpanded) {
+                wrap.classList.remove("max-h-80", "sm:max-h-96");
+                wrap.classList.add("max-h-[70vh]");
+                document.getElementById("toggleHistoryBtn").textContent = "نمایش کمتر";
+            } else {
+                wrap.classList.add("max-h-80", "sm:max-h-96");
+                wrap.classList.remove("max-h-[70vh]");
+                document.getElementById("toggleHistoryBtn").textContent = "نمایش بیشتر";
+            }
+        }
+
         function showToast(message, isSuccess = true) {
             const toast = document.getElementById("toast");
             const icon = isSuccess ? "✓" : "⚠️";
@@ -490,8 +563,9 @@
 
         function ensureProgressToast(key, title) {
             if (progressToasts.has(key)) return progressToasts.get(key);
+            const container = document.getElementById("progressToastContainer");
             const wrap = document.createElement("div");
-            wrap.className = "fixed bottom-4 left-4 w-72 bg-white shadow-lg border border-slate-200 rounded-xl p-3 mb-2";
+            wrap.className = "progress-toast bg-white border border-slate-200 rounded-xl p-3 pointer-events-auto";
             wrap.innerHTML = `
                 <div class="flex items-center justify-between mb-2">
                     <span class="text-sm font-semibold text-slate-800" data-title>${title}</span>
@@ -499,24 +573,40 @@
                 </div>
                 <div class="text-xs text-slate-600 mb-2" data-message></div>
                 <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div class="h-2 bg-indigo-500 w-0" data-bar></div>
+                    <div class="h-2 shimmer-bar w-0" data-bar></div>
                 </div>
             `;
-            document.body.appendChild(wrap);
+            container.appendChild(wrap);
             progressToasts.set(key, wrap);
+            reorderProgressToasts();
             return wrap;
+        }
+
+        function reorderProgressToasts() {
+            const container = document.getElementById("progressToastContainer");
+            const items = Array.from(progressToasts.values());
+            items.forEach(el => container.appendChild(el));
         }
 
         function updateProgressToast(key, { title, message, percent, status }) {
             const el = ensureProgressToast(key, title || "رزرو");
             if (title) el.querySelector('[data-title]').textContent = title;
             if (message) el.querySelector('[data-message]').textContent = message;
-            if (typeof percent === 'number') el.querySelector('[data-bar]').style.width = `${percent}%`;
-            if (status) el.querySelector('[data-status]').textContent = status;
+            if (typeof percent === 'number') {
+                el.querySelector('[data-bar]').style.width = `${Math.max(5, percent)}%`;
+            } else {
+                el.querySelector('[data-bar]').style.width = "15%";
+            }
+            if (status) {
+                const map = { done: "تمام", error: "خطا" };
+                el.querySelector('[data-status]').textContent = map[status] || status;
+            }
             if (status === 'done' || status === 'error') {
+                el.querySelector('[data-bar]').classList.remove("shimmer-bar");
                 setTimeout(() => {
                     el.remove();
                     progressToasts.delete(key);
+                    reorderProgressToasts();
                 }, 3000);
             }
         }
@@ -942,6 +1032,7 @@
         document.getElementById("saveSettingsBtn").addEventListener("click", saveAdvancedSettings);
         document.getElementById("saveDayEditBtn").addEventListener("click", saveDayEdit);
         document.getElementById("deleteDayEditBtn").addEventListener("click", deleteDay);
+        document.getElementById("toggleHistoryBtn").addEventListener("click", toggleHistory);
 
         // Close modals on backdrop click
         document.getElementById("settingsModal").addEventListener("click", (e) => {
