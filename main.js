@@ -17,12 +17,18 @@ const { Server } = require("socket.io");
 // Global WebSocket instance
 let io = null;
 
+// Emit progress updates over WebSocket if available
+function emitProgress(runId, label, step, totalSteps, message, status = "progress") {
+    if (!io) return;
+    io.emit("reserve:progress", { runId, label, step, totalSteps, message, status, ts: new Date().toISOString() });
+}
+
 // -------------------- Persian date helper (very lightweight) --------------------
 function toJalaliString(d) {
-    // Minimal Jalali converter for display; you can swap with a lib if you prefer.
-    // Algorithm adapted (light) — not exact for edge centuries but fine for current usage:
-    // For production-grade accuracy, use 'jalaali-js' or 'moment-jalaali'.
-    const gy = d.year(), gm = d.month() + 1, gd = d.date();
+    // Accept both Date and dayjs objects
+    const gy = typeof d.getFullYear === "function" ? d.getFullYear() : d.year();
+    const gm = typeof d.getMonth === "function" ? d.getMonth() + 1 : d.month() + 1;
+    const gd = typeof d.getDate === "function" ? d.getDate() : d.date();
     function div(a, b) { return Math.floor(a / b); }
     const g_d_m = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || (gy % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
     let gy2 = gy - 1600, gm2 = gm - 1, gd2 = gd - 1;
@@ -207,15 +213,20 @@ function extractCsrfSeatAndUser(html, seatNumber) {
         userId,
     };
 }
-async function reserveOnce(client, store, dateInfo, label) {
+async function reserveOnce(client, store, dateInfo, label, runId) {
     try {
         console.log(`[reserveOnce] Starting reservation for ${label}...`);
+        emitProgress(runId, label, 1, 5, "درخواست صفحه پاپ‌آپ");
         const html = await openSeatPopupHTML(client, store, dateInfo, label);
         const { token, allSeats, userId } = extractCsrfSeatAndUser(html, store.seat_number);
+
+        emitProgress(runId, label, 2, 5, "انتخاب صندلی بر اساس اولویت");
 
         // اولویت صندلی‌ها رو از store میگیریم (یا دفلت رو استفاده می‌کنیم)
         const seatPriority = store.seat_priority;
         const selectedSeat = selectSeatByPriority(allSeats, seatPriority);
+
+        emitProgress(runId, label, 3, 5, `ارسال درخواست برای صندلی ${selectedSeat.number}`);
 
         const w = TIME_WINDOWS[label];
         const payload = new URLSearchParams({
@@ -238,9 +249,11 @@ async function reserveOnce(client, store, dateInfo, label) {
         });
 
         console.log(`[reserveOnce] Response:`, res.data);
+        emitProgress(runId, label, 4, 5, res.data?.Message || "پاسخ دریافت شد");
         return res.data;
     } catch (e) {
         console.error(`[reserveOnce] Error for ${label}:`, e.message);
+        emitProgress(runId, label, 5, 5, e.message || "خطا", "error");
         throw e;
     }
 }
@@ -268,17 +281,20 @@ async function runWithConcurrency(tasks, concurrency) {
     return results;
 }
 
-async function reserveSeatFlow(store, labels) {
+async function reserveSeatFlow(store, labels, runId) {
     // ensure global client exists
     if (!GLOBAL_CLIENT) GLOBAL_CLIENT = buildClient();
 
     // attempt login once (refresh client on failure)
     try {
+        emitProgress(runId, "login", 0, 5, "شروع لاگین");
         await login(GLOBAL_CLIENT, store);
+        emitProgress(runId, "login", 1, 5, "لاگین موفق");
     } catch (e) {
         console.log("[reserveSeatFlow] Login failed, retrying with fresh client...");
         GLOBAL_CLIENT = buildClient();
         await login(GLOBAL_CLIENT, store);
+        emitProgress(runId, "login", 1, 5, "لاگین مجدد موفق");
     }
 
     const dateInfo = computeReserveDate(store.reserveDateMode);
@@ -301,7 +317,7 @@ async function reserveSeatFlow(store, labels) {
             while (attempt < maxAttempts) {
                 attempt++;
                 try {
-                    const r = await reserveOnce(GLOBAL_CLIENT, store, dateInfo, label);
+                    const r = await reserveOnce(GLOBAL_CLIENT, store, dateInfo, label, runId);
                     return { label, success: !!r.Success, message: r.Message || "", raw: r };
                 } catch (e) {
                     lastError = e;
@@ -324,27 +340,30 @@ async function reserveSeatFlow(store, labels) {
             const err = tr.error;
             const windowLabel = err.label || "unknown";
             results.push({ label: windowLabel, success: false, message: err.message || String(err) });
-            await logReservation({ 
-                date: dateInfo.iso, 
-                window: windowLabel, 
-                status: "failed", 
-                message: "", 
-                error: err.message || String(err), 
+            await logReservation({
+                date: dateInfo.iso,
+                window: windowLabel,
+                status: "failed",
+                message: "",
+                error: err.message || String(err),
                 timestamp: new Date().toISOString(),
-                jalaliDate: toJalaliString(new Date(dateInfo.iso))
+                jalaliDate: toJalaliString(dayjs(dateInfo.iso))
             });
+            emitProgress(runId, windowLabel, 5, 5, err.message || "خطا", "error");
         } else if (tr) {
             results.push({ label: tr.label, success: tr.success, message: tr.message });
-            await logReservation({ 
-                date: dateInfo.iso, 
-                window: tr.label || "unknown", 
-                status: tr.success ? "success" : "failed", 
-                message: tr.message || "", 
+            await logReservation({
+                date: dateInfo.iso,
+                window: tr.label || "unknown",
+                status: tr.success ? "success" : "failed",
+                message: tr.message || "",
                 timestamp: new Date().toISOString(),
-                jalaliDate: toJalaliString(new Date(dateInfo.iso))
+                jalaliDate: toJalaliString(dayjs(dateInfo.iso))
             });
+            emitProgress(runId, tr.label || "unknown", 5, 5, tr.message || "پایان", tr.success ? "done" : "error");
         } else {
             results.push({ label: "unknown", success: false, message: "Unknown result" });
+            emitProgress(runId, "unknown", 5, 5, "نتیجه نامشخص", "error");
         }
     }
 
@@ -505,20 +524,21 @@ app.post("/api/reserve", async (req, res) => {
         const st = await readStore();
         const windows = Array.isArray(req.body.windows) ? req.body.windows.filter(w => TIME_WINDOWS[w]) : (st.selectedWindows || []);
         if (!windows.length) return res.status(400).json({ ok: false, error: "No windows selected" });
+        const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
         
         // ارسال شروع رزرو به کلاینت‌ها
-        if (io) io.emit("reserve:start", { date: new Date().toISOString(), windows });
+        if (io) io.emit("reserve:start", { runId, date: new Date().toISOString(), windows });
         
-        const { results, dateInfo } = await reserveSeatFlow(st, windows);
+        const { results, dateInfo } = await reserveSeatFlow(st, windows, runId);
         
         // ارسال نتایج
-        if (io) io.emit("reserve:complete", { dateInfo, results });
+        if (io) io.emit("reserve:complete", { runId, dateInfo, results });
         
         // Mark scheduledDays for the date
         const key = dateInfo.iso;
         st.scheduledDays[key] = windows;
         await writeStore(st);
-        res.json({ ok: true, date: dateInfo, results });
+        res.json({ ok: true, runId, date: dateInfo, results });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
     }
@@ -547,9 +567,10 @@ app.post("/api/test-reserve", async (req, res) => {
         if (!date || !Array.isArray(windows) || windows.length === 0) {
             return res.status(400).json({ ok: false, error: "date and windows required" });
         }
+        const runId = `test-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
         
         // اطلاع به کلاینت‌ها (شنگول بازی شروع شد)
-        if (io) io.emit("test-reserve:start", { date, windows });
+        if (io) io.emit("test-reserve:start", { runId, date, windows });
         
         // ساختار dateInfo برای تاریخ دلخواه
         const dateInfo = {
@@ -584,7 +605,7 @@ app.post("/api/test-reserve", async (req, res) => {
                     message: "(test)",
                     error: err.message || String(err),
                     timestamp: new Date().toISOString(),
-                    jalaliDate: toJalaliString(new Date(date))
+                    jalaliDate: toJalaliString(dayjs(date))
                 });
             } else if (tr) {
                 results.push({ label: tr.label, success: tr.success, message: tr.message });
@@ -594,15 +615,15 @@ app.post("/api/test-reserve", async (req, res) => {
                     status: tr.success ? "success" : "failed",
                     message: "(test) " + (tr.message || ""),
                     timestamp: new Date().toISOString(),
-                    jalaliDate: toJalaliString(new Date(date))
+                    jalaliDate: toJalaliString(dayjs(date))
                 });
             }
         }
         
         // ارسال نتایج
-        if (io) io.emit("test-reserve:complete", { dateInfo, results });
+        if (io) io.emit("test-reserve:complete", { runId, dateInfo, results });
         
-        res.json({ ok: true, date, results });
+        res.json({ ok: true, runId, date, results });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
     }

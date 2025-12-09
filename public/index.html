@@ -10,6 +10,8 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Anti-Kokh" />
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%232c3e50'/%3E%3Ctext x='32' y='40' font-size='26' text-anchor='middle' fill='white' font-family='Arial'%3EAK%3C/text%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="/manifest.json" />
     <style>
@@ -320,6 +322,35 @@
         </div>
     </div>
 
+    <!-- Gamble Modal -->
+    <div id="gambleModal"
+        class="fixed inset-0 modal-backdrop opacity-0 pointer-events-none transition-opacity z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl animate-fade-in">
+            <div class="border-b border-slate-200 p-6 flex items-center justify-between">
+                <h2 class="text-2xl font-bold">🎲 شنگول بازی (تست فوری)</h2>
+                <button id="closeGambleBtn" class="text-2xl text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div class="p-6 space-y-5">
+                <div>
+                    <p class="text-sm font-semibold mb-2">انتخاب تاریخ (تا ۱۵ روز آینده)</p>
+                    <div id="gambleDayGrid" class="grid grid-cols-3 gap-2"></div>
+                </div>
+
+                <div>
+                    <p class="text-sm font-semibold mb-2">انتخاب بازه‌ها</p>
+                    <div id="gambleWindows" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-2">
+                    <button id="submitGambleBtn"
+                        class="px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 text-white font-semibold">شروع
+                        شنگول بازی</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast"
         class="fixed bottom-4 right-4 max-w-sm bg-slate-900 text-white px-6 py-3 rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity">
@@ -330,38 +361,59 @@
     <script>
         const TIME_WINDOWS = ["8-11", "11-14", "14-17", "17-20", "20-21"];
         let currentEditDay = null;
+        let gambleSelectedDate = null;
         let socket = null;
 
         // ==================== WebSocket Setup ====================
         function initWebSocket() {
             socket = io();
-            
+
             socket.on("connect", () => {
                 console.log("[WebSocket] Connected:", socket.id);
             });
-            
+
             socket.on("reserve:start", (data) => {
                 console.log("[WebSocket] Reserve started:", data);
                 showToast(`🚀 شروع رزرو برای ${data.windows.join(", ")}`, true);
             });
-            
+
             socket.on("reserve:complete", (data) => {
                 console.log("[WebSocket] Reserve complete:", data);
                 loadHistory();
                 showToast(`✅ رزرو تکمیل شد`, true);
+                if (data.runId && data.results) {
+                    data.results.forEach(r => {
+                        const key = `${data.runId}-${r.label}`;
+                        updateProgressToast(key, { status: r.success ? "done" : "error", message: r.message || "پایان", percent: 100 });
+                    });
+                }
             });
-            
+
+            socket.on("reserve:progress", (payload) => {
+                const { runId, label, step, totalSteps, message, status } = payload;
+                const percent = Math.min(100, Math.round((step / totalSteps) * 100));
+                const key = `${runId}-${label}`;
+                const title = label === "login" ? "ورود" : `رزرو ${label}`;
+                updateProgressToast(key, { title, message, percent, status: status === "error" ? "error" : "در حال انجام" });
+            });
+
             socket.on("test-reserve:start", (data) => {
                 console.log("[WebSocket] Test reserve started:", data);
                 showToast(`🎲 شنگول بازی برای ${data.windows.join(", ")} در ${data.date}`, true);
             });
-            
+
             socket.on("test-reserve:complete", (data) => {
                 console.log("[WebSocket] Test reserve complete:", data);
                 loadHistory();
                 showToast(`✅ شنگول بازی تکمیل شد`, true);
+                if (data.runId && data.results) {
+                    data.results.forEach(r => {
+                        const key = `${data.runId}-${r.label}`;
+                        updateProgressToast(key, { status: r.success ? "done" : "error", message: r.message || "پایان", percent: 100 });
+                    });
+                }
             });
-            
+
             socket.on("disconnect", () => {
                 console.log("[WebSocket] Disconnected");
             });
@@ -386,6 +438,87 @@
             toast.classList.add(isSuccess ? "bg-slate-900" : "bg-red-600");
             toast.classList.remove("opacity-0");
             setTimeout(() => toast.classList.add("opacity-0"), 3000);
+        }
+
+        // Gamble modal helpers
+        function buildGambleDayGrid() {
+            const grid = document.getElementById("gambleDayGrid");
+            grid.innerHTML = "";
+            const now = new Date();
+            for (let i = 0; i < 15; i++) {
+                const d = new Date();
+                d.setDate(now.getDate() + i);
+                const iso = d.toISOString().slice(0, 10);
+                const label = jalaliOf(d);
+                const badge = i === 0 ? "(امروز)" : i === 1 ? "(فردا)" : "";
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "w-full border rounded-lg p-2 text-sm hover:border-indigo-500 hover:bg-indigo-50 transition flex flex-col items-start gap-1";
+                btn.dataset.date = iso;
+                btn.innerHTML = `<span class="font-semibold">${label}</span><span class="text-xs text-slate-500">${badge}</span>`;
+                btn.addEventListener("click", () => selectGambleDate(iso));
+                grid.appendChild(btn);
+                if (i === 0) selectGambleDate(iso);
+            }
+        }
+
+        function selectGambleDate(iso) {
+            gambleSelectedDate = iso;
+            document.querySelectorAll('#gambleDayGrid button').forEach(b => {
+                const active = b.dataset.date === iso;
+                b.classList.toggle("border-indigo-500", active);
+                b.classList.toggle("bg-indigo-50", active);
+            });
+        }
+
+        function buildGambleWindows(selected = []) {
+            const wrap = document.getElementById("gambleWindows");
+            wrap.innerHTML = "";
+            TIME_WINDOWS.forEach(w => {
+                const checked = selected.includes(w);
+                wrap.insertAdjacentHTML("beforeend", `
+            <label class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-indigo-50 cursor-pointer transition ${checked ? 'bg-indigo-50 border-indigo-400' : ''}">
+              <input type="checkbox" value="${w}" ${checked ? "checked" : ""} class="gamble-window accent-orange-500 w-5 h-5">
+              <span class="font-medium text-sm">${w}</span>
+            </label>
+          `);
+            });
+        }
+
+        // Toasts with progress
+        const progressToasts = new Map(); // key: runId+label -> element
+
+        function ensureProgressToast(key, title) {
+            if (progressToasts.has(key)) return progressToasts.get(key);
+            const wrap = document.createElement("div");
+            wrap.className = "fixed bottom-4 left-4 w-72 bg-white shadow-lg border border-slate-200 rounded-xl p-3 mb-2";
+            wrap.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-semibold text-slate-800" data-title>${title}</span>
+                    <span class="text-xs text-slate-500" data-status>در حال انجام</span>
+                </div>
+                <div class="text-xs text-slate-600 mb-2" data-message></div>
+                <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div class="h-2 bg-indigo-500 w-0" data-bar></div>
+                </div>
+            `;
+            document.body.appendChild(wrap);
+            progressToasts.set(key, wrap);
+            return wrap;
+        }
+
+        function updateProgressToast(key, { title, message, percent, status }) {
+            const el = ensureProgressToast(key, title || "رزرو");
+            if (title) el.querySelector('[data-title]').textContent = title;
+            if (message) el.querySelector('[data-message]').textContent = message;
+            if (typeof percent === 'number') el.querySelector('[data-bar]').style.width = `${percent}%`;
+            if (status) el.querySelector('[data-status]').textContent = status;
+            if (status === 'done' || status === 'error') {
+                setTimeout(() => {
+                    el.remove();
+                    progressToasts.delete(key);
+                }, 3000);
+            }
         }
 
         // ==================== Jalali Date Helper ====================
@@ -482,7 +615,7 @@
 
             entries.forEach(entry => {
                 let statusIcon, statusColor, statusText;
-                
+
                 if (entry.status === "success") {
                     statusIcon = "✅";
                     statusColor = "bg-green-50 text-green-700";
@@ -500,18 +633,17 @@
                     statusColor = "bg-slate-50 text-slate-700";
                     statusText = "نامعلوم";
                 }
-                
+
                 // تبدیل timestamp به ساعت تهران (UTC+3:30)
-                const timestamp = new Date(entry.timestamp);
-                const tehranTime = new Date(timestamp.getTime() + (3.5 * 60 * 60 * 1000) - timestamp.getTimezoneOffset() * 60000);
-                const time = tehranTime.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-                
-                const date = entry.date || entry.jalaliDate || "—";
+                const timestamp = new Date(entry.timestamp || entry.created_at || Date.now());
+                const time = timestamp.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tehran" });
+
+                const dateStr = entry.jalaliDate || (entry.date ? jalaliOf(new Date(entry.date)) : "—");
                 const message = entry.message || entry.error || "—";
 
                 tbody.insertAdjacentHTML("beforeend", `
           <tr class="hover:bg-slate-50 transition">
-            <td class="py-3 text-right text-sm">${date}</td>
+                        <td class="py-3 text-right text-sm">${dateStr}</td>
             <td class="py-3 text-right text-sm font-mono">${entry.window || "—"}</td>
             <td class="py-3 text-right">
               <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusColor}">
@@ -738,40 +870,54 @@
             }
         }
 
-        // شنگول بازی (test reserve)
-        async function gamblerTime() {
-            if (!currentEditDay) {
-                showToast("لطفاً ابتدا روزی را برای شنگول بازی انتخاب کنید", false);
+        function openGambleModal() {
+            buildGambleDayGrid();
+            const selected = Array.from(document.querySelectorAll(".window-checkbox:checked")).map(x => x.value);
+            buildGambleWindows(selected);
+            showModal("gambleModal");
+        }
+
+        async function submitGamble() {
+            const date = gambleSelectedDate;
+            const windows = Array.from(document.querySelectorAll(".gamble-window:checked")).map(x => x.value);
+
+            if (!date) {
+                showToast("لطفاً یک تاریخ را انتخاب کنید", false);
                 return;
             }
 
-            const wraps = document.querySelectorAll("#dayEditWindowsWrap label");
-            const selected = Array.from(wraps)
-                .filter(w => w.querySelector("input[type='checkbox']").checked)
-                .map(w => w.querySelector("span").innerText);
-
-            if (!selected.length) {
-                showToast("لطفاً حداقل یک بازه را انتخاب کنید", false);
+            if (!windows.length) {
+                showToast("حداقل یک بازه انتخاب شود", false);
                 return;
             }
 
-            const btn = document.getElementById("gambleBtn");
+            const btn = document.getElementById("submitGambleBtn");
             btn.disabled = true;
-            btn.innerHTML = "⏳ شنگول در حال...";
+            const oldLabel = btn.textContent;
+            btn.textContent = "⏳ در حال تست...";
 
             try {
                 const r = await fetch("/api/test-reserve", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ date: currentEditDay, windows: selected })
+                    body: JSON.stringify({ date, windows })
                 });
                 const data = await r.json();
 
-                if (data.ok && data.results) {
-                    const successes = data.results.filter(x => x.success).length;
-                    const total = data.results.length;
-                    showToast(`🎲 نتیجه شنگول: ${successes}/${total} موفق`, successes > 0);
-                    loadHistory();
+                if (data.ok) {
+                    showToast("درخواست شنگول ارسال شد", true);
+                    hideModal("gambleModal");
+                    if (data.runId) {
+                        windows.forEach(w => {
+                            updateProgressToast(`${data.runId}-${w}`, { title: `رزرو ${w}`, message: "در صف", percent: 5, status: "در حال انجام" });
+                        });
+                    }
+                    if (data.results) {
+                        const successes = data.results.filter(x => x.success).length;
+                        const total = data.results.length;
+                        showToast(`🎲 نتیجه شنگول: ${successes}/${total} موفق`, successes > 0);
+                        loadHistory();
+                    }
                 } else {
                     showToast(data.error || "خطا در شنگول بازی", false);
                 }
@@ -779,7 +925,7 @@
                 showToast("خطا: " + e.message, false);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = "🎲 شنگول بازی";
+                btn.textContent = oldLabel;
             }
         }
 
@@ -787,10 +933,12 @@
         document.getElementById("openSettingsBtn").addEventListener("click", () => showModal("settingsModal"));
         document.getElementById("closeSettingsBtn").addEventListener("click", () => hideModal("settingsModal"));
         document.getElementById("closeDayEditBtn").addEventListener("click", () => hideModal("dayEditModal"));
+        document.getElementById("closeGambleBtn").addEventListener("click", () => hideModal("gambleModal"));
 
         document.getElementById("saveConfigBtn").addEventListener("click", saveMainConfig);
         document.getElementById("reserveNowBtn").addEventListener("click", reserveNow);
-        document.getElementById("gambleBtn").addEventListener("click", gamblerTime);
+        document.getElementById("gambleBtn").addEventListener("click", openGambleModal);
+        document.getElementById("submitGambleBtn").addEventListener("click", submitGamble);
         document.getElementById("saveSettingsBtn").addEventListener("click", saveAdvancedSettings);
         document.getElementById("saveDayEditBtn").addEventListener("click", saveDayEdit);
         document.getElementById("deleteDayEditBtn").addEventListener("click", deleteDay);
@@ -801,6 +949,9 @@
         });
         document.getElementById("dayEditModal").addEventListener("click", (e) => {
             if (e.target.id === "dayEditModal") hideModal("dayEditModal");
+        });
+        document.getElementById("gambleModal").addEventListener("click", (e) => {
+            if (e.target.id === "gambleModal") hideModal("gambleModal");
         });
 
         // Initial load and WebSocket

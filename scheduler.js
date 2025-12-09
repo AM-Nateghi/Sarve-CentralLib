@@ -72,7 +72,8 @@ function startScheduler(store, reserveSeatFlow, readStore, writeStore, logReserv
                     if (scheduledToday.length > 0) {
                         console.log(`[Scheduler] Running reservation for today (${todayIso}): ${scheduledToday.join(', ')}`);
                         try {
-                            const { results } = await reserveSeatFlow(currentStore, scheduledToday);
+                            const runId = `sched-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+                            const { results } = await reserveSeatFlow(currentStore, scheduledToday, runId);
                             console.log(`[Scheduler] Today results:`, results);
                             
                             // پاک کردن از scheduled بعد از اجرا
@@ -86,7 +87,8 @@ function startScheduler(store, reserveSeatFlow, readStore, writeStore, logReserv
                     if (scheduledTomorrow.length > 0) {
                         console.log(`[Scheduler] Running reservation for tomorrow (${tomorrowIso}): ${scheduledTomorrow.join(', ')}`);
                         try {
-                            const { results } = await reserveSeatFlow(currentStore, scheduledTomorrow);
+                            const runId = `sched-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+                            const { results } = await reserveSeatFlow(currentStore, scheduledTomorrow, runId);
                             console.log(`[Scheduler] Tomorrow results:`, results);
                             
                             // پاک کردن از scheduled بعد از اجرا
