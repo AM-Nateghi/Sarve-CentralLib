@@ -124,11 +124,18 @@ async function logReservation(data) {
     const entryId = `${date}-${window}-${Date.now()}`;
 
     try {
+        // تبدیل ISO timestamp به DATETIME format
+        let datetimeValue = timestamp;
+        if (typeof timestamp === 'string' && timestamp.includes('T')) {
+            // تبدیل 2025-12-09T09:38:27.498Z به 2025-12-09 09:38:27
+            datetimeValue = timestamp.replace('T', ' ').replace(/\.\d+Z$/, '');
+        }
+
         await pool.query(
             `INSERT INTO reservation_logs 
             (entry_id, date, window, status, message, error, timestamp, jalali_date)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [entryId, date, window, status, message || '', error || null, timestamp, jalaliDate]
+            [entryId, date, window, status, message || '', error || null, datetimeValue, jalaliDate]
         );
     } catch (err) {
         console.error('[DB] Failed to log reservation:', err.message);
