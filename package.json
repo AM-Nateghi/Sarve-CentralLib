@@ -8,6 +8,7 @@
     "dayjs": "^1.11.19",
     "express": "^5.1.0",
     "fs": "^0.0.1-security",
+    "mysql2": "^3.11.5",
     "tough-cookie": "^6.0.0"
   },
   "scripts": {

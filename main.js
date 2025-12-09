@@ -5,14 +5,12 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const fs = require("fs");
-const path = require("path");
 const dayjs = require("dayjs");
 const axios = require("axios");
 const tough = require("tough-cookie");
 const { wrapper } = require("axios-cookiejar-support");
 const cheerio = require("cheerio");
-const { logReservation, getHistory, getHistoryByDate } = require("./logs");
+const { initDatabase, logReservation, getHistory, getHistoryByDate, readStore, writeStore } = require("./db");
 
 // -------------------- Persian date helper (very lightweight) --------------------
 function toJalaliString(d) {
@@ -37,34 +35,7 @@ function toJalaliString(d) {
 }
 
 // -------------------- Config and storage --------------------
-const STORE_PATH = path.join(__dirname, "store.json");
-const defaultStore = {
-    username: "0928731571",
-    passwd: "AmN!@#27",
-    seat_number: 33,
-    seat_priority: [33, 32, 34, 37, 42],
-    // How many concurrent reserve requests to run after a single login.
-    // Keep this small to avoid overloading the server. Default 3.
-    concurrency: 3,
-    // Maximum random spread (ms) to stagger request start times to avoid bursts.
-    requestStartSpreadMs: 400,
-    sc: "ktDKKeFZe5lkOhWTITfdmQ==",
-    reserveDateMode: "today", // today | tomorrow
-    selectedWindows: [], // e.g., ["8-11","17-20"]
-    scheduledDays: {},   // { "YYYY-MM-DD": ["8-11","20-21"] }
-    lastMonthQuota: null // optional server-reported quota
-};
-function readStore() {
-    try {
-        return JSON.parse(fs.readFileSync(STORE_PATH, "utf8"));
-    } catch {
-        fs.writeFileSync(STORE_PATH, JSON.stringify(defaultStore, null, 2));
-        return { ...defaultStore };
-    }
-}
-function writeStore(st) {
-    fs.writeFileSync(STORE_PATH, JSON.stringify(st, null, 2));
-}
+// توابع readStore و writeStore از db.js می‌آیند
 
 // -------------------- Reservation core (login/reserve) --------------------
 let GLOBAL_CLIENT = null;  // Global client for session persistence
@@ -360,7 +331,7 @@ async function reserveSeatFlow(store, labels) {
     const quotaMsg = results.find(x => x.success && /سهم|باقی مانده/.test(x.message));
     if (quotaMsg) {
         store.lastMonthQuota = quotaMsg.message;
-        writeStore(store);
+        await writeStore(store);
     }
 
     return { dateInfo, results };
@@ -371,7 +342,7 @@ let schedulerTimer = null;
 function scheduleDaily() {
     if (schedulerTimer) clearInterval(schedulerTimer);
     schedulerTimer = setInterval(async () => {
-        const store = readStore();
+        const store = await readStore();
         const now = dayjs();
         const target = now.hour() === 7 && now.minute() === 1;
         if (!target) return;
@@ -383,7 +354,7 @@ function scheduleDaily() {
             // mark scheduledDays
             const key = dateInfo.iso;
             store.scheduledDays[key] = labels;
-            writeStore(store);
+            await writeStore(store);
         } catch (e) {
             console.error("[Scheduler] error:", e.message);
         }
@@ -399,18 +370,18 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Serve static files from public folder
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static("public"));
 
 // Serve the index.html for root path
 app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+    res.sendFile(__dirname + "/public/index.html");
 });
 
 // ==================== API Routes ====================
 
 // Get full config
-app.get("/api/config", (req, res) => {
-    const st = readStore();
+app.get("/api/config", async (req, res) => {
+    const st = await readStore();
     res.json({
         username: st.username,
         passwd: st.passwd,
@@ -427,8 +398,8 @@ app.get("/api/config", (req, res) => {
 });
 
 // Update main config (seat_number, seat_priority, reserveDateMode, selectedWindows)
-app.post("/api/config", (req, res) => {
-    const st = readStore();
+app.post("/api/config", async (req, res) => {
+    const st = await readStore();
     const { seat_number, seat_priority, reserveDateMode, selectedWindows, concurrency, requestStartSpreadMs } = req.body || {};
 
     if (seat_number) st.seat_number = parseInt(seat_number, 10);
@@ -438,13 +409,13 @@ app.post("/api/config", (req, res) => {
     if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) st.reserveDateMode = reserveDateMode;
     if (Array.isArray(selectedWindows)) st.selectedWindows = selectedWindows.filter(w => TIME_WINDOWS[w]);
 
-    writeStore(st);
+    await writeStore(st);
     res.json({ ok: true });
 });
 
 // Update advanced settings (username, password, sc, etc)
-app.post("/api/settings", (req, res) => {
-    const st = readStore();
+app.post("/api/settings", async (req, res) => {
+    const st = await readStore();
     const { username, passwd, seat_number, seat_priority, sc, reserveDateMode, concurrency, requestStartSpreadMs } = req.body || {};
 
     if (username) st.username = username;
@@ -456,13 +427,13 @@ app.post("/api/settings", (req, res) => {
     if (sc) st.sc = sc;
     if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) st.reserveDateMode = reserveDateMode;
 
-    writeStore(st);
+    await writeStore(st);
     res.json({ ok: true });
 });
 
 // Schedule a specific day with windows
-app.post("/api/schedule-day", (req, res) => {
-    const st = readStore();
+app.post("/api/schedule-day", async (req, res) => {
+    const st = await readStore();
     const { date, windows } = req.body || {};
 
     if (!date) return res.status(400).json({ ok: false, error: "date required" });
@@ -474,21 +445,21 @@ app.post("/api/schedule-day", (req, res) => {
         st.scheduledDays[date] = windows.filter(w => TIME_WINDOWS[w]);
     }
 
-    writeStore(st);
+    await writeStore(st);
     res.json({ ok: true });
 });
 
 // Reserve immediately for selected windows (or provided windows)
 app.post("/api/reserve", async (req, res) => {
     try {
-        const st = readStore();
+        const st = await readStore();
         const windows = Array.isArray(req.body.windows) ? req.body.windows.filter(w => TIME_WINDOWS[w]) : (st.selectedWindows || []);
         if (!windows.length) return res.status(400).json({ ok: false, error: "No windows selected" });
         const { results, dateInfo } = await reserveSeatFlow(st, windows);
         // Mark scheduledDays for the date
         const key = dateInfo.iso;
         st.scheduledDays[key] = windows;
-        writeStore(st);
+        await writeStore(st);
         res.json({ ok: true, date: dateInfo, results });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
@@ -496,16 +467,16 @@ app.post("/api/reserve", async (req, res) => {
 });
 
 // Get reservation history
-app.get("/api/history", (req, res) => {
+app.get("/api/history", async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
-    const history = getHistory(limit);
+    const history = await getHistory(limit);
     res.json({ ok: true, entries: history });
 });
 
 // Get history for a specific date
-app.get("/api/history/:date", (req, res) => {
+app.get("/api/history/:date", async (req, res) => {
     const { date } = req.params;
-    const history = getHistoryByDate(date);
+    const history = await getHistoryByDate(date);
     res.json({ ok: true, entries: history });
 });
 
@@ -514,4 +485,15 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 
 // Start
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Anti-Kokh listening on http://localhost:${port}`));
+
+// Initialize database and start server
+(async () => {
+    try {
+        await initDatabase();
+        console.log('[DB] Database initialized');
+        app.listen(port, () => console.log(`Anti-Kokh listening on http://localhost:${port}`));
+    } catch (error) {
+        console.error('[DB] Failed to start:', error.message);
+        process.exit(1);
+    }
+})();
