@@ -208,7 +208,7 @@ function jalaliOf(d) {
             console.warn("jalalidate library not available, using fallback");
         }
     }
-    
+
     // Fallback: محاسبه دستی
     const gy = d.getFullYear(), gm = d.getMonth() + 1, gd = d.getDate();
     function div(a, b) { return Math.floor(a / b); }
