@@ -56,13 +56,37 @@ function startScheduler(store, reserveSeatFlow, readStore, writeStore, logReserv
                 const now = dayjs();
                 const hour = now.hour();
                 const minute = now.minute();
+                const todayIso = now.format('YYYY-MM-DD');
                 
-                // اجرا در ساعت 7:00 تا 7:01
+                const currentStore = await readStore();
+
+                // 1. چک کن تایم‌بندی‌های دلخواه (Custom Schedules)
+                if (currentStore.customSchedules && Array.isArray(currentStore.customSchedules)) {
+                    const schedules = currentStore.customSchedules.filter(s => !s.executed);
+                    
+                    for (const schedule of schedules) {
+                        // چک کن آیا زمان اجرا رسیده است
+                        if (schedule.executionDate === todayIso && schedule.executionHour === hour && schedule.executionMinute === minute) {
+                            console.log(`[Scheduler] Running custom schedule: ${schedule.id} for ${schedule.reserveDate}`);
+                            try {
+                                const runId = `customsched-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+                                const { results } = await reserveSeatFlow(currentStore, schedule.windows, runId);
+                                console.log(`[Scheduler] Custom schedule results:`, results);
+                                
+                                // علامت‌گذاری به عنوان اجرا شده
+                                schedule.executed = true;
+                                await writeStore(currentStore);
+                            } catch (e) {
+                                console.error(`[Scheduler] Error running custom schedule:`, e.message);
+                            }
+                        }
+                    }
+                }
+
+                // 2. چک کن تایم‌بندی‌های روزانه (scheduledDays) - ساعت 7:00
                 if (hour === 7 && minute === 0) {
                     console.log('[Scheduler] Running scheduled task at 07:00...');
                     
-                    const currentStore = await readStore();
-                    const todayIso = now.format('YYYY-MM-DD');
                     const tomorrowIso = now.add(1, 'day').format('YYYY-MM-DD');
 
                     // چک کن آیا امروز یا فردا برای رزرو تایم‌بندی شده است
@@ -104,7 +128,7 @@ function startScheduler(store, reserveSeatFlow, readStore, writeStore, logReserv
             }
         });
 
-        console.log('[Scheduler] Task scheduler started (runs at 07:00 each day, checks every 1 minute)');
+        console.log('[Scheduler] Task scheduler started (runs every 1 minute, checks custom schedules and daily tasks)');
     }
 
     scheduleCheck();

@@ -1,0 +1,128 @@
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+@font-face {
+  font-family: "Estedad-v";
+  src: url("https://raw.githubusercontent.com/aminabedi68/Estedad/refs/heads/master/fonts/webfonts/variable/Estedad%5BKSHD%2Cwght%5D.woff2");
+}
+
+/* Mobile-First Responsive */
+* {
+  touch-action: manipulation;
+  font-family: "Estedad-v", sans-serif;
+}
+
+button {
+  min-height: 44px;
+}
+
+/* iOS minimum touch target */
+input {
+  min-height: 44px;
+  font-size: 16px;
+}
+
+/* Prevent zoom on input focus */
+
+/* Safe area for notch devices */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Prevent text selection on buttons */
+button,
+[role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Shimmer loading for progress bars */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-bar {
+  background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 40%, #e2e8f0 80%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+/* Progress toast container & card */
+#progressToastContainer {
+  z-index: 60;
+}
+
+.progress-toast {
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+}
+
+/* History collapse */
+#historyWrapper {
+  transition: max-height 0.25s ease;
+}
+
+/* Mobile tweaks */
+@media (max-width: 640px) {
+  body {
+    padding: 0 10px;
+  }
+
+  header h1 {
+    font-size: 1.75rem;
+  }
+
+  header p {
+    font-size: 0.9rem;
+  }
+
+  .main-actions {
+    flex-direction: column;
+  }
+
+  .main-actions button {
+    width: 100%;
+  }
+
+  table th,
+  table td {
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  #progressToastContainer {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+  }
+}

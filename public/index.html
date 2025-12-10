@@ -14,167 +14,41 @@
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%232c3e50'/%3E%3Ctext x='32' y='40' font-size='26' text-anchor='middle' fill='white' font-family='Arial'%3EAK%3C/text%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="/manifest.json" />
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"
+        integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <script src="https://cdn.kavenegar.com/sdk/page.js?appId=0ecfa240-c40d-43dd-8c85-95aa540c5feb" defer
         charset="utf-8"></script>
-    <style>
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .animate-fade-in {
-            animation: fadeIn 0.3s ease-out;
-        }
-
-        .modal-backdrop {
-            background: rgba(0, 0, 0, 0.5);
-        }
-
-        @font-face {
-            font-family: 'Estedad-v';
-            src: url('https://raw.githubusercontent.com/aminabedi68/Estedad/refs/heads/master/fonts/webfonts/variable/Estedad%5BKSHD%2Cwght%5D.woff2');
-        }
-
-        /* Mobile-First Responsive */
-        * {
-            touch-action: manipulation;
-            font-family: 'Estedad-v', sans-serif;
-        }
-
-        button {
-            min-height: 44px;
-        }
-
-        /* iOS minimum touch target */
-        input {
-            min-height: 44px;
-            font-size: 16px;
-        }
-
-        /* Prevent zoom on input focus */
-
-        /* Safe area for notch devices */
-        @supports (padding: max(0px)) {
-            body {
-                padding-left: max(0px, env(safe-area-inset-left));
-                padding-right: max(0px, env(safe-area-inset-right));
-            }
-        }
-
-        /* Smooth scrolling */
-        html {
-            scroll-behavior: smooth;
-        }
-
-        /* Prevent text selection on buttons */
-        button,
-        [role="button"] {
-            -webkit-user-select: none;
-            user-select: none;
-        }
-
-        /* Shimmer loading for progress bars */
-        @keyframes shimmer {
-            0% {
-                background-position: -200% 0;
-            }
-
-            100% {
-                background-position: 200% 0;
-            }
-        }
-
-        .shimmer-bar {
-            background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 40%, #e2e8f0 80%);
-            background-size: 200% 100%;
-            animation: shimmer 1.2s linear infinite;
-        }
-
-        /* Progress toast container & card */
-        #progressToastContainer {
-            z-index: 60;
-        }
-
-        .progress-toast {
-            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
-        }
-
-        /* History collapse */
-        #historyWrapper {
-            transition: max-height 0.25s ease;
-        }
-
-        /* Mobile tweaks */
-        @media (max-width: 640px) {
-            body {
-                padding: 0 10px;
-            }
-
-            header h1 {
-                font-size: 1.75rem;
-            }
-
-            header p {
-                font-size: 0.9rem;
-            }
-
-            .main-actions {
-                flex-direction: column;
-            }
-
-            .main-actions button {
-                width: 100%;
-            }
-
-            table th,
-            table td {
-                font-size: 0.8rem;
-                white-space: nowrap;
-            }
-
-            #progressToastContainer {
-                left: 0.5rem;
-                right: 0.5rem;
-                width: auto;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css" />
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 to-slate-100 text-slate-800 overflow-x-hidden">
-    <div class="min-h-screen p-4">
-        <div class="max-w-2xl mx-auto">
+    <div class="min-h-screen">
+        <div class="container max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <!-- Header -->
-            <header class="text-center mb-8 pt-6">
+            <header class="text-center mb-8 pt-4">
                 <h1
-                    class="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    class="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent leading-tight">
                     سیستم ضدکخ</h1>
-                <p class="text-slate-500 mt-2">رزرو هوشمند صندلی کتابخانه</p>
+                <p class="text-slate-500 mt-2 text-sm sm:text-base">رزرو هوشمند صندلی کتابخانه</p>
             </header>
 
             <!-- Main cards grid -->
-            <div class="grid gap-6 mb-8">
+            <div class="grid gap-6 mb-10">
                 <!-- Config card -->
-                <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6 space-y-5">
+                <section class="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-slate-100 p-6 space-y-5">
                     <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-                        <h2 class="text-xl font-bold">⚙️ تنظیمات</h2>
+                        <h2 class="text-lg sm:text-xl font-bold">⚙️ تنظیمات</h2>
                         <button id="openSettingsBtn"
-                            class="text-indigo-600 hover:bg-indigo-50 p-2 rounded-lg transition text-xl">🔧</button>
+                            class="text-indigo-600 hover:bg-indigo-50 p-2 rounded-lg transition text-xl"
+                            aria-label="باز کردن تنظیمات پیشرفته">🔧</button>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="bg-slate-50 rounded-lg p-3">
+                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
                             <p class="text-xs text-slate-500 mb-1">شماره صندلی</p>
                             <p id="seatDisplay" class="text-2xl font-bold text-indigo-600">—</p>
                         </div>
-                        <div class="bg-slate-50 rounded-lg p-3">
+                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
                             <p class="text-xs text-slate-500 mb-1">حالت تاریخ</p>
                             <p id="dateModeDisplay" class="text-2xl font-bold text-purple-600">—</p>
                         </div>
@@ -182,43 +56,55 @@
 
                     <div>
                         <label class="text-sm font-semibold mb-3 block">بازه‌های زمانی:</label>
-                        <div id="windowsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div id="windowsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                             <!-- Checkboxes injected here -->
                         </div>
                     </div>
 
                     <div class="flex gap-3 main-actions flex-col sm:flex-row">
                         <button id="reserveNowBtn"
-                            class="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-105 active:scale-95">
+                            class="flex-1 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-[1.01] active:scale-95">
                             🚀 رزرو فوری
                         </button>
-                        <button id="gambleBtn"
-                            class="flex-1 rounded-xl bg-gradient-to-r from-orange-500 to-red-600 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-105 active:scale-95"
-                            title="شنگول بازی - تست خارج از ساعت‌های مجاز">
-                            🎲 شنگول بازی
+                        <button id="customScheduleBtn"
+                            class="flex-1 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-600 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-[1.01] active:scale-95">
+                            ⏰ تایم‌بندی دلخواه
                         </button>
                         <button id="saveConfigBtn"
-                            class="rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-900 px-5 py-3 font-bold transition">
+                            class="rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 px-5 py-3 font-semibold transition border border-slate-200">
                             💾 ذخیره
                         </button>
                     </div>
                 </section>
 
                 <!-- Quota and quota info -->
-                <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
+                <section class="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-slate-100 p-6">
                     <h3 class="font-bold mb-3">📊 وضعیت سهم</h3>
-                    <p id="quotaDisplay" class="text-sm text-slate-600 p-3 bg-slate-50 rounded-lg">در حال بارگذاری...
+                    <p id="quotaDisplay"
+                        class="text-sm text-slate-600 p-3 bg-slate-50 rounded-lg border border-slate-100">در حال
+                        بارگذاری...
                     </p>
                 </section>
 
+                <!-- Custom Schedules Section -->
+                <section class="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-slate-100 p-6 space-y-4">
+                    <div class="flex items-center justify-between mb-2 pb-3 border-b border-slate-100">
+                        <h2 class="text-lg sm:text-xl font-bold">⏰ تایم‌بندی‌های دلخواه</h2>
+                        <span class="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full">تایم‌بندی‌های ثبت شده</span>
+                    </div>
+                    <div id="customSchedulesContainer" class="space-y-3">
+                        <p class="text-sm text-slate-500 text-center py-4">هیچ تایم‌بندی دلخواهی ثبت نشده است</p>
+                    </div>
+                </section>
+
                 <!-- Week preview -->
-                <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
-                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-                        <h2 class="text-xl font-bold">📅 جدول هفتگی</h2>
+                <section class="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-slate-100 p-6 space-y-4">
+                    <div class="flex items-center justify-between mb-2 pb-3 border-b border-slate-100">
+                        <h2 class="text-lg sm:text-xl font-bold">📅 جدول هفتگی</h2>
                         <span class="text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">تا ۱۰ روز
                             آینده</span>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div class="hidden sm:block overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b border-slate-200">
@@ -233,22 +119,23 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="weekCards" class="grid sm:hidden gap-3"></div>
                 </section>
 
                 <!-- History Section -->
-                <section class="bg-white rounded-2xl shadow-lg border border-slate-100 p-6">
-                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
-                        <h2 class="text-xl font-bold">📋 تاریخچه رزروها</h2>
+                <section class="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-slate-100 p-6 space-y-4">
+                    <div class="flex items-center justify-between mb-2 pb-3 border-b border-slate-100">
+                        <h2 class="text-lg sm:text-xl font-bold">📋 تاریخچه رزروها</h2>
                         <div class="flex items-center gap-2">
                             <span class="hidden sm:inline text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full">۵۰
                                 ورودی اخیر</span>
                             <button id="toggleHistoryBtn"
                                 class="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
-                                type="button">نمایش بیشتر</button>
+                                type="button" aria-expanded="false">نمایش بیشتر</button>
                         </div>
                     </div>
                     <div id="historyWrapper"
-                        class="overflow-x-auto max-h-80 sm:max-h-96 overflow-y-auto rounded-xl border border-slate-100">
+                        class="hidden sm:block overflow-x-auto max-h-80 sm:max-h-96 overflow-y-auto rounded-xl border border-slate-100">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b border-slate-200">
@@ -264,15 +151,12 @@
                             </tbody>
                         </table>
                     </div>
-                    <p id="historyEmpty" class="text-center text-slate-500 py-8 text-sm">هیچ رزروی ثبت نشده است</p>
+                    <div id="historyCards" class="grid sm:hidden gap-3"></div>
+                    <p id="historyEmpty" class="text-center text-slate-500 py-6 text-sm">هیچ رزروی ثبت نشده است</p>
                 </section>
             </div>
         </div>
     </div>
-
-    </table>
-    </div>
-    </section>
     <div id="settingsModal"
         class="fixed inset-0 modal-backdrop opacity-0 pointer-events-none transition-opacity z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-fade-in max-h-[90vh] overflow-y-auto">
@@ -397,680 +281,77 @@
         </div>
     </div>
 
-    <!-- Gamble Modal -->
-    <div id="gambleModal"
+    <!-- Custom Schedule Modal -->
+    <div id="customScheduleModal"
         class="fixed inset-0 modal-backdrop opacity-0 pointer-events-none transition-opacity z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl animate-fade-in">
-            <div class="border-b border-slate-200 p-6 flex items-center justify-between">
-                <h2 class="text-2xl font-bold">🎲 شنگول بازی (تست فوری)</h2>
-                <button id="closeGambleBtn" class="text-2xl text-slate-400 hover:text-slate-600">✕</button>
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-fade-in max-h-[90vh] overflow-y-auto">
+            <div class="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
+                <h2 class="text-2xl font-bold">⏰ تایم‌بندی دلخواه</h2>
+                <button id="closeCustomScheduleBtn" class="text-2xl text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
-            <div class="p-6 space-y-5">
+            <div class="p-6 space-y-6">
+                <!-- Reserve Date Selection -->
                 <div>
-                    <p class="text-sm font-semibold mb-2">انتخاب تاریخ (تا ۱۵ روز آینده)</p>
-                    <div id="gambleDayGrid" class="grid grid-cols-3 gap-2"></div>
+                    <label class="text-sm font-semibold block mb-3">تاریخ رزرو (روزی که میخوام رزرو کنم)</label>
+                    <p class="text-xs text-slate-500 mb-3">تاریخ مورد نظر برای رزرو صندلی را انتخاب کنید</p>
+                    <div id="reserveDateGrid" class="grid grid-cols-3 gap-2"></div>
                 </div>
 
+                <!-- Time Windows for Reserve Date -->
                 <div>
-                    <p class="text-sm font-semibold mb-2">انتخاب بازه‌ها</p>
-                    <div id="gambleWindows" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+                    <label class="text-sm font-semibold block mb-3">بازه‌های زمانی</label>
+                    <p class="text-xs text-slate-500 mb-3">بازه‌های رزرو برای روز انتخاب شده</p>
+                    <div id="scheduleWindowsGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
                 </div>
 
-                <div class="flex justify-end gap-3 pt-2">
-                    <button id="submitGambleBtn"
-                        class="px-4 py-2 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 text-white font-semibold">شروع
-                        شنگول بازی</button>
+                <!-- Execution Date & Time -->
+                <div class="border-t border-slate-100 pt-6">
+                    <label class="text-sm font-semibold block mb-3">زمان اجرا (کی این رزرو رو انجام بده)</label>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-xs font-semibold block mb-2">تاریخ اجرا</label>
+                            <input id="executionDateInput" type="date"
+                                class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <p class="text-xs text-slate-500 mt-1">تاریخی که سیستم رو فعال میکنید</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="text-xs font-semibold block mb-2">ساعت</label>
+                                <input id="executionHourInput" type="number" min="0" max="23"
+                                    class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="07">
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold block mb-2">دقیقه</label>
+                                <input id="executionMinuteInput" type="number" min="0" max="59"
+                                    class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="00">
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Schedule Button -->
+                <button id="submitCustomScheduleBtn"
+                    class="w-full rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 font-bold hover:shadow-lg transition">
+                    ✓ ثبت تایم‌بندی
+                </button>
             </div>
         </div>
     </div>
 
     <!-- Toast Notification -->
-    <div id="progressToastContainer" class="fixed bottom-4 left-4 w-72 sm:w-80 flex flex-col gap-3 pointer-events-none">
+    <div id="progressToastContainer"
+        class="fixed bottom-4 left-0 right-0 mx-auto w-full max-w-sm sm:max-w-md sm:left-4 sm:right-auto px-4 sm:px-0 flex flex-col gap-3 pointer-events-none z-50">
     </div>
     <div id="toast"
-        class="fixed bottom-4 right-4 max-w-sm bg-slate-900 text-white px-6 py-3 rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity">
+        class="fixed bottom-4 left-0 right-0 mx-auto sm:left-auto sm:right-4 max-w-sm bg-slate-900 text-white px-6 py-3 rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity">
         <div id="toastMessage"></div>
     </div>
 
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
-    <script>
-        const TIME_WINDOWS = ["8-11", "11-14", "14-17", "17-20", "20-21"];
-        let currentEditDay = null;
-        let gambleSelectedDate = null;
-        let socket = null;
-        let historyExpanded = false;
-
-        // ==================== WebSocket Setup ====================
-        function initWebSocket() {
-            socket = io();
-
-            socket.on("connect", () => {
-                console.log("[WebSocket] Connected:", socket.id);
-            });
-
-            socket.on("reserve:start", (data) => {
-                console.log("[WebSocket] Reserve started:", data);
-                showToast(`🚀 شروع رزرو برای ${data.windows.join(", ")}`, true);
-            });
-
-            socket.on("reserve:complete", (data) => {
-                console.log("[WebSocket] Reserve complete:", data);
-                loadHistory();
-                showToast(`✅ رزرو تکمیل شد`, true);
-                if (data.runId && data.results) {
-                    data.results.forEach(r => {
-                        const key = `${data.runId}-${r.label}`;
-                        updateProgressToast(key, { status: r.success ? "done" : "error", message: r.message || "پایان", percent: 100 });
-                    });
-                }
-            });
-
-            socket.on("reserve:progress", (payload) => {
-                const { runId, label, step, totalSteps, message, status } = payload;
-                const percent = Math.min(100, Math.round((step / totalSteps) * 100));
-                const key = `${runId}-${label}`;
-                const title = label === "login" ? "ورود" : `رزرو ${label}`;
-                updateProgressToast(key, { title, message, percent, status: status === "error" ? "error" : "در حال انجام" });
-            });
-
-            socket.on("test-reserve:start", (data) => {
-                console.log("[WebSocket] Test reserve started:", data);
-                showToast(`🎲 شنگول بازی برای ${data.windows.join(", ")} در ${data.date}`, true);
-            });
-
-            socket.on("test-reserve:complete", (data) => {
-                console.log("[WebSocket] Test reserve complete:", data);
-                loadHistory();
-                showToast(`✅ شنگول بازی تکمیل شد`, true);
-                if (data.runId && data.results) {
-                    data.results.forEach(r => {
-                        const key = `${data.runId}-${r.label}`;
-                        updateProgressToast(key, { status: r.success ? "done" : "error", message: r.message || "پایان", percent: 100 });
-                    });
-                }
-            });
-
-            socket.on("disconnect", () => {
-                console.log("[WebSocket] Disconnected");
-            });
-        }
-
-        // ==================== Modal & Toast Helpers ====================
-        function showModal(modalId) {
-            const modal = document.getElementById(modalId);
-            modal.classList.remove("opacity-0", "pointer-events-none");
-        }
-
-        function hideModal(modalId) {
-            const modal = document.getElementById(modalId);
-            modal.classList.add("opacity-0", "pointer-events-none");
-        }
-
-        function toggleHistory() {
-            const wrap = document.getElementById("historyWrapper");
-            historyExpanded = !historyExpanded;
-            if (historyExpanded) {
-                wrap.classList.remove("max-h-80", "sm:max-h-96");
-                wrap.classList.add("max-h-[70vh]");
-                document.getElementById("toggleHistoryBtn").textContent = "نمایش کمتر";
-            } else {
-                wrap.classList.add("max-h-80", "sm:max-h-96");
-                wrap.classList.remove("max-h-[70vh]");
-                document.getElementById("toggleHistoryBtn").textContent = "نمایش بیشتر";
-            }
-        }
-
-        function showToast(message, isSuccess = true) {
-            const toast = document.getElementById("toast");
-            const icon = isSuccess ? "✓" : "⚠️";
-            document.getElementById("toastMessage").textContent = `${icon} ${message}`;
-            toast.classList.remove("bg-red-600", "bg-slate-900");
-            toast.classList.add(isSuccess ? "bg-slate-900" : "bg-red-600");
-            toast.classList.remove("opacity-0");
-            setTimeout(() => toast.classList.add("opacity-0"), 3000);
-        }
-
-        // Gamble modal helpers
-        function buildGambleDayGrid() {
-            const grid = document.getElementById("gambleDayGrid");
-            grid.innerHTML = "";
-            const now = new Date();
-            for (let i = 0; i < 15; i++) {
-                const d = new Date();
-                d.setDate(now.getDate() + i);
-                const iso = d.toISOString().slice(0, 10);
-                const label = jalaliOf(d);
-                const badge = i === 0 ? "(امروز)" : i === 1 ? "(فردا)" : "";
-                const btn = document.createElement("button");
-                btn.type = "button";
-                btn.className = "w-full border rounded-lg p-2 text-sm hover:border-indigo-500 hover:bg-indigo-50 transition flex flex-col items-start gap-1";
-                btn.dataset.date = iso;
-                btn.innerHTML = `<span class="font-semibold">${label}</span><span class="text-xs text-slate-500">${badge}</span>`;
-                btn.addEventListener("click", () => selectGambleDate(iso));
-                grid.appendChild(btn);
-                if (i === 0) selectGambleDate(iso);
-            }
-        }
-
-        function selectGambleDate(iso) {
-            gambleSelectedDate = iso;
-            document.querySelectorAll('#gambleDayGrid button').forEach(b => {
-                const active = b.dataset.date === iso;
-                b.classList.toggle("border-indigo-500", active);
-                b.classList.toggle("bg-indigo-50", active);
-            });
-        }
-
-        function buildGambleWindows(selected = []) {
-            const wrap = document.getElementById("gambleWindows");
-            wrap.innerHTML = "";
-            TIME_WINDOWS.forEach(w => {
-                const checked = selected.includes(w);
-                wrap.insertAdjacentHTML("beforeend", `
-            <label class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-indigo-50 cursor-pointer transition ${checked ? 'bg-indigo-50 border-indigo-400' : ''}">
-              <input type="checkbox" value="${w}" ${checked ? "checked" : ""} class="gamble-window accent-orange-500 w-5 h-5">
-              <span class="font-medium text-sm">${w}</span>
-            </label>
-          `);
-            });
-        }
-
-        // Toasts with progress
-        const progressToasts = new Map(); // key: runId+label -> element
-
-        function ensureProgressToast(key, title) {
-            if (progressToasts.has(key)) return progressToasts.get(key);
-            const container = document.getElementById("progressToastContainer");
-            const wrap = document.createElement("div");
-            wrap.className = "progress-toast bg-white border border-slate-200 rounded-xl p-3 pointer-events-auto";
-            wrap.innerHTML = `
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-sm font-semibold text-slate-800" data-title>${title}</span>
-                    <span class="text-xs text-slate-500" data-status>در حال انجام</span>
-                </div>
-                <div class="text-xs text-slate-600 mb-2" data-message></div>
-                <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div class="h-2 shimmer-bar w-0" data-bar></div>
-                </div>
-            `;
-            container.appendChild(wrap);
-            progressToasts.set(key, wrap);
-            reorderProgressToasts();
-            return wrap;
-        }
-
-        function reorderProgressToasts() {
-            const container = document.getElementById("progressToastContainer");
-            const items = Array.from(progressToasts.values());
-            items.forEach(el => container.appendChild(el));
-        }
-
-        function updateProgressToast(key, { title, message, percent, status }) {
-            const el = ensureProgressToast(key, title || "رزرو");
-            if (title) el.querySelector('[data-title]').textContent = title;
-            if (message) el.querySelector('[data-message]').textContent = message;
-            if (typeof percent === 'number') {
-                el.querySelector('[data-bar]').style.width = `${Math.max(5, percent)}%`;
-            } else {
-                el.querySelector('[data-bar]').style.width = "15%";
-            }
-            if (status) {
-                const map = { done: "تمام", error: "خطا" };
-                el.querySelector('[data-status]').textContent = map[status] || status;
-            }
-            if (status === 'done' || status === 'error') {
-                el.querySelector('[data-bar]').classList.remove("shimmer-bar");
-                setTimeout(() => {
-                    el.remove();
-                    progressToasts.delete(key);
-                    reorderProgressToasts();
-                }, 3000);
-            }
-        }
-
-        // ==================== Jalali Date Helper ====================
-        function jalaliOf(d) {
-            const gy = d.getFullYear(), gm = d.getMonth() + 1, gd = d.getDate();
-            function div(a, b) { return Math.floor(a / b) }
-            const g_d_m = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || (gy % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-            let gy2 = gy - 1600, gm2 = gm - 1, gd2 = gd - 1;
-            let g_day_no = 365 * gy2 + div(gy2 + 3, 4) - div(gy2 + 99, 100) + div(gy2 + 399, 400);
-            for (let i = 0; i < gm2; i++) g_day_no += g_d_m[i + 1];
-            g_day_no += gd2;
-            let j_day_no = g_day_no - 79;
-            const j_np = div(j_day_no, 12053); j_day_no %= 12053;
-            let jy = 979 + 33 * j_np + 4 * div(j_day_no, 1461); j_day_no %= 1461;
-            if (j_day_no >= 366) { jy += div(j_day_no - 366, 365); j_day_no = (j_day_no - 366) % 365; }
-            const jm_list = [31, 31, 31, 31, 31, 31, 30, 30, 30, 30, 30, 29];
-            let jm = 0; for (; jm < 12 && j_day_no >= jm_list[jm]; jm++) j_day_no -= jm_list[jm];
-            const jd = j_day_no + 1;
-            return `${jy}/${String(jm + 1).padStart(2, "0")}/${String(jd).padStart(2, "0")}`;
-        }
-
-        // ==================== Load and Render Config ====================
-        async function loadConfig() {
-            try {
-                const r = await fetch("/api/config");
-                const cfg = await r.json();
-
-                // Update displays
-                document.getElementById("seatDisplay").textContent = cfg.seat_number;
-                document.getElementById("dateModeDisplay").textContent = cfg.reserveDateMode === "tomorrow" ? "🌙 فردا" : "☀️ امروز";
-                document.getElementById("quotaDisplay").textContent = cfg.lastMonthQuota || "اطلاعاتی موجود نیست";
-
-                // Update modal inputs
-                document.getElementById("usernameInput").value = cfg.username || "";
-                document.getElementById("passwordInput").value = cfg.passwd || "";
-                document.getElementById("seatNumberInput").value = cfg.seat_number || 33;
-                document.getElementById("seatPriorityInput").value = (cfg.seat_priority || [33, 32, 34, 37, 42]).join(",");
-                document.getElementById("concurrencyInput").value = (typeof cfg.concurrency !== 'undefined') ? cfg.concurrency : 3;
-                document.getElementById("requestSpreadInput").value = (typeof cfg.requestStartSpreadMs !== 'undefined') ? cfg.requestStartSpreadMs : 400;
-                document.getElementById("scInput").value = cfg.sc || "";
-
-                if (cfg.reserveDateMode === "tomorrow") {
-                    document.getElementById("tomorrowRadio").checked = true;
-                } else {
-                    document.getElementById("todayRadio").checked = true;
-                }
-
-                // Render windows
-                const wrap = document.getElementById("windowsGrid");
-                wrap.innerHTML = "";
-                const selected = cfg.selectedWindows || [];
-                TIME_WINDOWS.forEach(w => {
-                    const checked = selected.includes(w);
-                    wrap.insertAdjacentHTML("beforeend", `
-            <label class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-indigo-50 cursor-pointer transition ${checked ? 'bg-indigo-50 border-indigo-400' : ''}">
-              <input type="checkbox" value="${w}" ${checked ? "checked" : ""} class="window-checkbox accent-indigo-600 w-5 h-5">
-              <span class="font-medium text-sm">${w}</span>
-            </label>
-          `);
-                });
-
-                // Render week table
-                renderWeekTable(cfg);
-
-                // Load and render history
-                loadHistory();
-            } catch (e) {
-                showToast("خطا در بارگذاری تنظیمات: " + e.message, false);
-            }
-        }
-
-        async function loadHistory() {
-            try {
-                const r = await fetch("/api/history?limit=50");
-                const data = await r.json();
-
-                if (data.ok && data.entries && data.entries.length > 0) {
-                    renderHistory(data.entries);
-                } else {
-                    renderEmptyHistory();
-                }
-            } catch (e) {
-                console.error("Error loading history:", e.message);
-                renderEmptyHistory();
-            }
-        }
-
-        function renderHistory(entries) {
-            const tbody = document.getElementById("historyTableBody");
-            const emptyMsg = document.getElementById("historyEmpty");
-
-            tbody.innerHTML = "";
-            emptyMsg.style.display = "none";
-
-            entries.forEach(entry => {
-                let statusIcon, statusColor, statusText;
-
-                if (entry.status === "success") {
-                    statusIcon = "✅";
-                    statusColor = "bg-green-50 text-green-700";
-                    statusText = "موفق";
-                } else if (entry.status === "failed") {
-                    statusIcon = "❌";
-                    statusColor = "bg-red-50 text-red-700";
-                    statusText = "ناموفق";
-                } else if (entry.status === "scheduled") {
-                    statusIcon = "📅";
-                    statusColor = "bg-blue-50 text-blue-700";
-                    statusText = "تایم‌بندی شده";
-                } else {
-                    statusIcon = "❓";
-                    statusColor = "bg-slate-50 text-slate-700";
-                    statusText = "نامعلوم";
-                }
-
-                // تبدیل timestamp به ساعت تهران (UTC+3:30)
-                const timestamp = new Date(entry.timestamp || entry.created_at || Date.now());
-                const time = timestamp.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Tehran" });
-
-                const dateStr = entry.jalaliDate || (entry.date ? jalaliOf(new Date(entry.date)) : "—");
-                const message = entry.message || entry.error || "—";
-
-                tbody.insertAdjacentHTML("beforeend", `
-          <tr class="hover:bg-slate-50 transition">
-                        <td class="py-3 text-right text-sm">${dateStr}</td>
-            <td class="py-3 text-right text-sm font-mono">${entry.window || "—"}</td>
-            <td class="py-3 text-right">
-              <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusColor}">
-                ${statusIcon} ${statusText}
-              </span>
-            </td>
-            <td class="py-3 text-right text-xs text-slate-600 max-w-xs truncate" title="${message}">${message}</td>
-            <td class="py-3 text-right text-xs text-slate-500">${time}</td>
-          </tr>
-        `);
-            });
-        }
-
-        function renderEmptyHistory() {
-            const tbody = document.getElementById("historyTableBody");
-            const emptyMsg = document.getElementById("historyEmpty");
-
-            tbody.innerHTML = "";
-            emptyMsg.style.display = "block";
-        }
-
-        function renderWeekTable(cfg) {
-            const tbody = document.getElementById("weekTableBody");
-            tbody.innerHTML = "";
-            const now = new Date();
-
-            for (let i = 0; i <= 9; i++) {
-                const d = new Date();
-                d.setDate(now.getDate() + i);
-                const iso = d.toISOString().slice(0, 10);
-                const scheduled = cfg.scheduledDays?.[iso] || [];
-                const shamsi = jalaliOf(d);
-                const isToday = i === 0;
-                const isTomorrow = i === 1;
-
-                tbody.insertAdjacentHTML("beforeend", `
-          <tr class="hover:bg-slate-50 transition">
-            <td class="py-3 text-right">
-              <div class="font-medium">${shamsi}</div>
-              <div class="text-xs text-slate-500">${isToday ? "(امروز)" : isTomorrow ? "(فردا)" : ""}</div>
-            </td>
-            <td class="py-3 text-right">
-              <div class="text-sm text-slate-600">${scheduled.length > 0 ? scheduled.join(", ") : "—"}</div>
-            </td>
-            <td class="py-3 text-right">
-              <span class="text-xs font-semibold px-2 py-1 rounded-full ${scheduled.length ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"}">
-                ${scheduled.length ? "✓ تایم‌بندی شده" : "خالی"}
-              </span>
-            </td>
-            <td class="py-3 text-right">
-              <button onclick="editDay('${iso}')" class="text-indigo-600 hover:text-indigo-800 text-sm font-semibold hover:underline">ویرایش</button>
-            </td>
-          </tr>
-        `);
-            }
-        }
-
-        // ==================== Edit Day ====================
-        function editDay(iso) {
-            currentEditDay = iso;
-            const d = new Date(iso);
-            const shamsi = jalaliOf(d);
-            document.getElementById("dayEditTitle").textContent = `ویرایش: ${shamsi}`;
-
-            // Load current selections
-            fetch("/api/config").then(r => r.json()).then(cfg => {
-                const scheduled = cfg.scheduledDays?.[iso] || [];
-                const wrap = document.getElementById("dayEditCheckboxes");
-                wrap.innerHTML = "";
-                TIME_WINDOWS.forEach(w => {
-                    const checked = scheduled.includes(w);
-                    wrap.insertAdjacentHTML("beforeend", `
-            <label class="flex items-center gap-2 p-3 border border-slate-200 rounded-lg hover:bg-indigo-50 cursor-pointer transition ${checked ? 'bg-indigo-50 border-indigo-400' : ''}">
-              <input type="checkbox" class="dayedit-checkbox accent-indigo-600 w-5 h-5" value="${w}" ${checked ? "checked" : ""}>
-              <span class="font-medium flex-1">${w}</span>
-            </label>
-          `);
-                });
-            });
-
-            showModal("dayEditModal");
-        }
-
-        async function saveDayEdit() {
-            const selected = Array.from(document.querySelectorAll(".dayedit-checkbox:checked")).map(x => x.value);
-            try {
-                const r = await fetch("/api/schedule-day", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ date: currentEditDay, windows: selected })
-                });
-                const data = await r.json();
-                if (data.ok) {
-                    showToast("روز بروزشد شد");
-                    hideModal("dayEditModal");
-                    loadConfig();
-                } else {
-                    showToast("خطا: " + data.error, false);
-                }
-            } catch (e) {
-                showToast("خطا: " + e.message, false);
-            }
-        }
-
-        async function deleteDay() {
-            if (confirm("آیا مطمئن هستید؟")) {
-                try {
-                    const r = await fetch("/api/schedule-day", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ date: currentEditDay, windows: [] })
-                    });
-                    const data = await r.json();
-                    if (data.ok) {
-                        showToast("روز حذف شد");
-                        hideModal("dayEditModal");
-                        loadConfig();
-                    } else {
-                        showToast("خطا: " + data.error, false);
-                    }
-                } catch (e) {
-                    showToast("خطا: " + e.message, false);
-                }
-            }
-        }
-
-        // ==================== Main Actions ====================
-        async function saveMainConfig() {
-            const selected = Array.from(document.querySelectorAll(".window-checkbox:checked")).map(x => x.value);
-            const mode = document.querySelector("input[name='reserveMode']:checked")?.value || "today";
-
-            try {
-                const r = await fetch("/api/config", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ selectedWindows: selected, reserveDateMode: mode })
-                });
-                const data = await r.json();
-                if (data.ok) {
-                    showToast("تنظیمات صفحه ذخیره شد");
-                    loadConfig();
-                } else {
-                    showToast("خطا: " + data.error, false);
-                }
-            } catch (e) {
-                showToast("خطا: " + e.message, false);
-            }
-        }
-
-        async function saveAdvancedSettings() {
-            const priorityStr = document.getElementById("seatPriorityInput").value.trim();
-            const priorityList = priorityStr
-                .split(",")
-                .map(s => parseInt(s.trim(), 10))
-                .filter(n => !isNaN(n));
-
-            if (priorityList.length === 0) {
-                showToast("لیست اولویت صندلی نمی‌تواند خالی باشد", false);
-                return;
-            }
-
-            const body = {
-                username: document.getElementById("usernameInput").value,
-                passwd: document.getElementById("passwordInput").value,
-                seat_number: parseInt(document.getElementById("seatNumberInput").value, 10) || 33,
-                seat_priority: priorityList,
-                concurrency: parseInt(document.getElementById("concurrencyInput").value, 10) || 3,
-                requestStartSpreadMs: parseInt(document.getElementById("requestSpreadInput").value, 10) || 400,
-                sc: document.getElementById("scInput").value,
-                reserveDateMode: document.querySelector("input[name='reserveMode']:checked")?.value || "today"
-            };
-
-            try {
-                const r = await fetch("/api/settings", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(body)
-                });
-                const data = await r.json();
-                if (data.ok) {
-                    showToast("تنظیمات ذخیره شدند");
-                    hideModal("settingsModal");
-                    loadConfig();
-                } else {
-                    showToast("خطا: " + data.error, false);
-                }
-            } catch (e) {
-                showToast("خطا: " + e.message, false);
-            }
-        }
-
-        async function reserveNow() {
-            const selected = Array.from(document.querySelectorAll(".window-checkbox:checked")).map(x => x.value);
-            if (!selected.length) {
-                showToast("هیچ بازه‌ای انتخاب نشده است", false);
-                return;
-            }
-
-            const btn = document.getElementById("reserveNowBtn");
-            btn.disabled = true;
-            btn.innerHTML = "⏳ در حال رزرو...";
-
-            try {
-                const r = await fetch("/api/reserve", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ windows: selected })
-                });
-                const data = await r.json();
-
-                if (data.ok && data.results) {
-                    const successes = data.results.filter(x => x.success).length;
-                    const total = data.results.length;
-                    showToast(`نتیجه: ${successes}/${total} رزرو موفق`);
-                    loadConfig();
-                } else {
-                    showToast(data.error || "خطا در رزرو", false);
-                }
-            } catch (e) {
-                showToast("خطا: " + e.message, false);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = "🚀 رزرو فوری";
-            }
-        }
-
-        function openGambleModal() {
-            buildGambleDayGrid();
-            const selected = Array.from(document.querySelectorAll(".window-checkbox:checked")).map(x => x.value);
-            buildGambleWindows(selected);
-            showModal("gambleModal");
-        }
-
-        async function submitGamble() {
-            const date = gambleSelectedDate;
-            const windows = Array.from(document.querySelectorAll(".gamble-window:checked")).map(x => x.value);
-
-            if (!date) {
-                showToast("لطفاً یک تاریخ را انتخاب کنید", false);
-                return;
-            }
-
-            if (!windows.length) {
-                showToast("حداقل یک بازه انتخاب شود", false);
-                return;
-            }
-
-            const btn = document.getElementById("submitGambleBtn");
-            btn.disabled = true;
-            const oldLabel = btn.textContent;
-            btn.textContent = "⏳ در حال تست...";
-
-            try {
-                const r = await fetch("/api/test-reserve", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ date, windows })
-                });
-                const data = await r.json();
-
-                if (data.ok) {
-                    showToast("درخواست شنگول ارسال شد", true);
-                    hideModal("gambleModal");
-                    if (data.runId) {
-                        windows.forEach(w => {
-                            updateProgressToast(`${data.runId}-${w}`, { title: `رزرو ${w}`, message: "در صف", percent: 5, status: "در حال انجام" });
-                        });
-                    }
-                    if (data.results) {
-                        const successes = data.results.filter(x => x.success).length;
-                        const total = data.results.length;
-                        showToast(`🎲 نتیجه شنگول: ${successes}/${total} موفق`, successes > 0);
-                        loadHistory();
-                    }
-                } else {
-                    showToast(data.error || "خطا در شنگول بازی", false);
-                }
-            } catch (e) {
-                showToast("خطا: " + e.message, false);
-            } finally {
-                btn.disabled = false;
-                btn.textContent = oldLabel;
-            }
-        }
-
-        // ==================== Event Listeners ====================
-        document.getElementById("openSettingsBtn").addEventListener("click", () => showModal("settingsModal"));
-        document.getElementById("closeSettingsBtn").addEventListener("click", () => hideModal("settingsModal"));
-        document.getElementById("closeDayEditBtn").addEventListener("click", () => hideModal("dayEditModal"));
-        document.getElementById("closeGambleBtn").addEventListener("click", () => hideModal("gambleModal"));
-
-        document.getElementById("saveConfigBtn").addEventListener("click", saveMainConfig);
-        document.getElementById("reserveNowBtn").addEventListener("click", reserveNow);
-        document.getElementById("gambleBtn").addEventListener("click", openGambleModal);
-        document.getElementById("submitGambleBtn").addEventListener("click", submitGamble);
-        document.getElementById("saveSettingsBtn").addEventListener("click", saveAdvancedSettings);
-        document.getElementById("saveDayEditBtn").addEventListener("click", saveDayEdit);
-        document.getElementById("deleteDayEditBtn").addEventListener("click", deleteDay);
-        document.getElementById("toggleHistoryBtn").addEventListener("click", toggleHistory);
-
-        // Close modals on backdrop click
-        document.getElementById("settingsModal").addEventListener("click", (e) => {
-            if (e.target.id === "settingsModal") hideModal("settingsModal");
-        });
-        document.getElementById("dayEditModal").addEventListener("click", (e) => {
-            if (e.target.id === "dayEditModal") hideModal("dayEditModal");
-        });
-        document.getElementById("gambleModal").addEventListener("click", (e) => {
-            if (e.target.id === "gambleModal") hideModal("gambleModal");
-        });
-
-        // Initial load and WebSocket
-        initWebSocket();
-        loadConfig();
-        loadHistory();
-        setInterval(loadConfig, 30000); // Refresh config every 30 seconds
-        setInterval(loadHistory, 30000); // Refresh history every 30 seconds
-    </script>
+    <script src="script.js"></script>
 </body>
 
 </html>

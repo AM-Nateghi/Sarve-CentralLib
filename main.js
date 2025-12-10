@@ -454,6 +454,7 @@ app.get("/api/config", async (req, res) => {
         reserveDateMode: st.reserveDateMode,
         selectedWindows: st.selectedWindows || [],
         scheduledDays: st.scheduledDays || {},
+        customSchedules: st.customSchedules || [],
         lastMonthQuota: st.lastMonthQuota || null
     });
 });
@@ -563,24 +564,79 @@ app.get("/api/history/:date", async (req, res) => {
     res.json({ ok: true, entries: history });
 });
 
-// Test/Gamble reserve (شنگول بازی) - بدون توجه به محدودیت‌های زمانی
-app.post("/api/test-reserve", async (req, res) => {
+// Test/Gamble reserve (شنگول بازی) - REMOVED
+// Custom schedule with execution date and time
+app.post("/api/custom-schedule", async (req, res) => {
     try {
         const st = await readStore();
-        const { date, windows } = req.body || {};
+        const { reserveDate, windows, executionDate, executionHour, executionMinute } = req.body || {};
         
-        if (!date || !Array.isArray(windows) || windows.length === 0) {
-            return res.status(400).json({ ok: false, error: "date and windows required" });
+        if (!reserveDate || !Array.isArray(windows) || windows.length === 0) {
+            return res.status(400).json({ ok: false, error: "reserveDate and windows required" });
         }
-        const runId = `test-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-        
-        // اطلاع به کلاینت‌ها (شنگول بازی شروع شد)
-        if (io) io.emit("test-reserve:start", { runId, date, windows });
-        const dateInfo = computeReserveDateFromISO(date);
-        const { results, dateInfo: usedDateInfo } = await reserveSeatFlow(st, windows, runId, dateInfo);
 
-        if (io) io.emit("test-reserve:complete", { runId, dateInfo: usedDateInfo, results });
-        res.json({ ok: true, runId, date, results });
+        if (!executionDate || typeof executionHour !== 'number' || typeof executionMinute !== 'number') {
+            return res.status(400).json({ ok: false, error: "executionDate, executionHour, and executionMinute required" });
+        }
+
+        // Validate executionHour and executionMinute
+        if (executionHour < 0 || executionHour > 23 || executionMinute < 0 || executionMinute > 59) {
+            return res.status(400).json({ ok: false, error: "Invalid time values" });
+        }
+
+        // Store the custom schedule
+        if (!st.customSchedules) st.customSchedules = [];
+        
+        const scheduleId = `cs-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+        const schedule = {
+            id: scheduleId,
+            reserveDate: reserveDate,
+            windows: windows.filter(w => TIME_WINDOWS[w]),
+            executionDate: executionDate,
+            executionHour: executionHour,
+            executionMinute: executionMinute,
+            created: new Date().toISOString(),
+            executed: false
+        };
+
+        st.customSchedules.push(schedule);
+        await writeStore(st);
+
+        // Log for each window
+        for (const w of schedule.windows) {
+            await logReservation({
+                date: reserveDate,
+                window: w,
+                status: "scheduled",
+                message: `تایم‌بندی دلخواه برای ${executionDate} ساعت ${String(executionHour).padStart(2, '0')}:${String(executionMinute).padStart(2, '0')}`,
+                timestamp: new Date().toISOString(),
+                jalaliDate: toJalaliString(new Date(reserveDate))
+            });
+        }
+
+        res.json({ ok: true, scheduleId });
+    } catch (e) {
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Delete custom schedule
+app.delete("/api/custom-schedule/:id", async (req, res) => {
+    try {
+        const st = await readStore();
+        const { id } = req.params;
+
+        if (!st.customSchedules) st.customSchedules = [];
+        
+        const index = st.customSchedules.findIndex(s => s.id === id);
+        if (index === -1) {
+            return res.status(404).json({ ok: false, error: "Schedule not found" });
+        }
+
+        st.customSchedules.splice(index, 1);
+        await writeStore(st);
+
+        res.json({ ok: true });
     } catch (e) {
         res.status(500).json({ ok: false, error: e.message });
     }
