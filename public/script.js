@@ -199,7 +199,7 @@ function updateProgressToast(key, { title, message, percent, status }) {
 
 // ==================== Jalali Date Helper ====================
 function jalaliOf(d) {
-    if (typeof jd !== 'undefined' && window.jd) {
+    if (typeof window !== 'undefined' && window.jd) {
         // استفاده از jalalidate library اگر موجود باشه
         try {
             const jalaliDate = new window.jd(d);
