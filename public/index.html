@@ -14,6 +14,8 @@
         href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%232c3e50'/%3E%3Ctext x='32' y='40' font-size='26' text-anchor='middle' fill='white' font-family='Arial'%3EAK%3C/text%3E%3C/svg%3E" />
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="manifest" href="/manifest.json" />
+    <script src="https://cdn.kavenegar.com/sdk/page.js?appId=0ecfa240-c40d-43dd-8c85-95aa540c5feb" defer
+        charset="utf-8"></script>
     <style>
         @keyframes fadeIn {
             from {
@@ -80,8 +82,13 @@
 
         /* Shimmer loading for progress bars */
         @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
+            0% {
+                background-position: -200% 0;
+            }
+
+            100% {
+                background-position: 200% 0;
+            }
         }
 
         .shimmer-bar {
@@ -109,22 +116,29 @@
             body {
                 padding: 0 10px;
             }
+
             header h1 {
                 font-size: 1.75rem;
             }
+
             header p {
                 font-size: 0.9rem;
             }
+
             .main-actions {
                 flex-direction: column;
             }
+
             .main-actions button {
                 width: 100%;
             }
-            table th, table td {
+
+            table th,
+            table td {
                 font-size: 0.8rem;
                 white-space: nowrap;
             }
+
             #progressToastContainer {
                 left: 0.5rem;
                 right: 0.5rem;
@@ -226,11 +240,15 @@
                     <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
                         <h2 class="text-xl font-bold">📋 تاریخچه رزروها</h2>
                         <div class="flex items-center gap-2">
-                            <span class="hidden sm:inline text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full">۵۰ ورودی اخیر</span>
-                            <button id="toggleHistoryBtn" class="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition" type="button">نمایش بیشتر</button>
+                            <span class="hidden sm:inline text-xs bg-slate-100 text-slate-700 px-3 py-1 rounded-full">۵۰
+                                ورودی اخیر</span>
+                            <button id="toggleHistoryBtn"
+                                class="text-xs px-3 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200 transition"
+                                type="button">نمایش بیشتر</button>
                         </div>
                     </div>
-                    <div id="historyWrapper" class="overflow-x-auto max-h-80 sm:max-h-96 overflow-y-auto rounded-xl border border-slate-100">
+                    <div id="historyWrapper"
+                        class="overflow-x-auto max-h-80 sm:max-h-96 overflow-y-auto rounded-xl border border-slate-100">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b border-slate-200">
@@ -409,7 +427,8 @@
     </div>
 
     <!-- Toast Notification -->
-    <div id="progressToastContainer" class="fixed bottom-4 left-4 w-72 sm:w-80 flex flex-col gap-3 pointer-events-none"></div>
+    <div id="progressToastContainer" class="fixed bottom-4 left-4 w-72 sm:w-80 flex flex-col gap-3 pointer-events-none">
+    </div>
     <div id="toast"
         class="fixed bottom-4 right-4 max-w-sm bg-slate-900 text-white px-6 py-3 rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity">
         <div id="toastMessage"></div>
