@@ -39,7 +39,7 @@ function initWebSocket() {
     socket.on("custom-schedule:complete", (data) => {
         console.log("[WebSocket] Custom schedule complete:", data);
         loadConfig();
-        showToast(`✅ تایم‌بندی ثبت شد`, true);
+        showToast(`✅ زمان‌بندی ثبت شد`, true);
     });
 
     socket.on("disconnect", () => console.log("[WebSocket] Disconnected"));
@@ -73,15 +73,15 @@ function showToast(message, isSuccess = true) {
     $("#toastMessage").text(`${icon} ${message}`);
     $toast.removeClass("bg-red-600 bg-slate-900").addClass(isSuccess ? "bg-slate-900" : "bg-red-600");
     $toast.removeClass("opacity-0");
-    
+
     // Cancel any existing timeout
     if ($toast.data('timeout')) clearTimeout($toast.data('timeout'));
-    
+
     // Auto-hide after 3 seconds
     const timeout = setTimeout(() => {
         $toast.addClass("opacity-0");
     }, 3000);
-    
+
     $toast.data('timeout', timeout);
 }
 
@@ -91,7 +91,7 @@ function buildCustomScheduleUI() {
     const $reserveDateGrid = $("#reserveDateGrid");
     $reserveDateGrid.empty();
     const now = new Date();
-    
+
     for (let i = 0; i < 10; i++) {
         const d = new Date();
         d.setDate(now.getDate() + i);
@@ -167,7 +167,7 @@ function reorderProgressToasts() {
 function updateProgressToast(key, { title, message, percent, status }) {
     const item = progressToasts.get(key);
     if (!item) return ensureProgressToast(key, title || "رزرو");
-    
+
     const $el = item.$el;
     if (title) $el.find('[data-title]').text(title);
     if (message) $el.find('[data-message]').text(message);
@@ -182,13 +182,13 @@ function updateProgressToast(key, { title, message, percent, status }) {
     }
     if (status === "done" || status === "error") {
         $el.find('[data-bar]').removeClass("shimmer-bar");
-        
+
         // Cancel existing timeout if any
         if (item.timeout) clearTimeout(item.timeout);
-        
-        // Auto-remove after 3 seconds
+
+        // Auto-remove after 3 seconds from completion
         item.timeout = setTimeout(() => {
-            $el.fadeOut(300, function() {
+            $el.fadeOut(300, function () {
                 $(this).remove();
                 progressToasts.delete(key);
                 reorderProgressToasts();
@@ -199,6 +199,17 @@ function updateProgressToast(key, { title, message, percent, status }) {
 
 // ==================== Jalali Date Helper ====================
 function jalaliOf(d) {
+    if (typeof jd !== 'undefined' && window.jd) {
+        // استفاده از jalalidate library اگر موجود باشه
+        try {
+            const jalaliDate = new window.jd(d);
+            return `${jalaliDate.y}/${String(jalaliDate.m).padStart(2, "0")}/${String(jalaliDate.d).padStart(2, "0")}`;
+        } catch (e) {
+            console.warn("jalalidate library not available, using fallback");
+        }
+    }
+    
+    // Fallback: محاسبه دستی
     const gy = d.getFullYear(), gm = d.getMonth() + 1, gd = d.getDate();
     function div(a, b) { return Math.floor(a / b); }
     const g_d_m = [0, 31, ((gy % 4 === 0 && gy % 100 !== 0) || (gy % 400 === 0)) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -277,7 +288,7 @@ function renderCustomSchedules(schedules) {
         const executionDate = schedule.executionDate;
         const executionD = new Date(executionDate);
         const executionShamsi = jalaliOf(executionD);
-        const statusBadge = schedule.executed 
+        const statusBadge = schedule.executed
             ? '<span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">✓ ثبت‌شده</span>'
             : '<span class="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">⏳ زمان‌بندی شده</span>';
 
@@ -338,7 +349,7 @@ function renderHistory(entries) {
         } else if (entry.status === "scheduled") {
             statusIcon = "📅";
             statusColor = "bg-blue-50 text-blue-700";
-            statusText = "تایم‌بندی شده";
+            statusText = "زمان‌بندی شده";
         } else {
             statusIcon = "❓";
             statusColor = "bg-slate-50 text-slate-700";
@@ -403,11 +414,11 @@ function renderWeekTable(cfg) {
         const isToday = i === 0;
         const isTomorrow = i === 1;
         const windowsText = scheduled.length > 0 ? scheduled.join(", ") : "—";
-        
+
         // Determine status based on scheduledDays or custom schedules
         let badgeClass = "bg-slate-100 text-slate-600";
         let badgeLabel = "خالی";
-        
+
         if (scheduled.length > 0) {
             badgeClass = "bg-yellow-100 text-yellow-700";
             badgeLabel = "📅 زمان‌بندی شده";
@@ -646,9 +657,9 @@ function submitCustomSchedule() {
         url: "/api/custom-schedule",
         method: "POST",
         contentType: "application/json",
-        data: JSON.stringify({ 
-            reserveDate, 
-            windows, 
+        data: JSON.stringify({
+            reserveDate,
+            windows,
             executionDate,
             executionHour,
             executionMinute
@@ -656,11 +667,11 @@ function submitCustomSchedule() {
     })
         .done((data) => {
             if (data.ok) {
-                showToast("تایم‌بندی دلخواه ثبت شد", true);
+                showToast("زمان‌بندی دلخواه ثبت شد", true);
                 hideModal("customScheduleModal");
                 loadConfig();
             } else {
-                showToast(data.error || "خطا در ثبت تایم‌بندی", false);
+                showToast(data.error || "خطا در ثبت زمان‌بندی", false);
             }
         })
         .fail((_, __, err) => showToast("خطا: " + err, false))
@@ -670,8 +681,8 @@ function submitCustomSchedule() {
 }
 
 function deleteCustomSchedule(scheduleId) {
-    if (!confirm("آیا میخواهید این تایم‌بندی را حذف کنید؟")) return;
-    
+    if (!confirm("آیا میخواهید این زمان‌بندی را حذف کنید؟")) return;
+
     $.ajax({
         url: "/api/custom-schedule/" + scheduleId,
         method: "DELETE",
@@ -679,7 +690,7 @@ function deleteCustomSchedule(scheduleId) {
     })
         .done((data) => {
             if (data.ok) {
-                showToast("تایم‌بندی حذف شد", true);
+                showToast("زمان‌بندی حذف شد", true);
                 loadConfig();
             } else {
                 showToast(data.error || "خطا در حذف", false);

@@ -431,7 +431,7 @@ function initSocketIO(httpServer) {
 
     io.on("connection", (socket) => {
         console.log(`[WebSocket] Client connected: ${socket.id}`);
-        
+
         socket.on("disconnect", () => {
             console.log(`[WebSocket] Client disconnected: ${socket.id}`);
         });
@@ -506,14 +506,14 @@ app.post("/api/schedule-day", async (req, res) => {
     } else {
         const validWindows = windows.filter(w => TIME_WINDOWS[w]);
         st.scheduledDays[date] = validWindows;
-        
+
         // Log scheduled status for each window
         for (const w of validWindows) {
             await logReservation({
                 date: date,
                 window: w,
                 status: "scheduled",
-                message: "تایم‌بندی شده برای اجرای خودکار",
+                message: "زمان‌بندی شده برای اجرای خودکار",
                 timestamp: new Date().toISOString(),
                 jalaliDate: toJalaliString(new Date(date))
             });
@@ -530,16 +530,16 @@ app.post("/api/reserve", async (req, res) => {
         const st = await readStore();
         const windows = Array.isArray(req.body.windows) ? req.body.windows.filter(w => TIME_WINDOWS[w]) : (st.selectedWindows || []);
         if (!windows.length) return res.status(400).json({ ok: false, error: "No windows selected" });
-        const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
-        
+        const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
         // ارسال شروع رزرو به کلاینت‌ها
         if (io) io.emit("reserve:start", { runId, date: new Date().toISOString(), windows });
-        
+
         const { results, dateInfo } = await reserveSeatFlow(st, windows, runId);
-        
+
         // ارسال نتایج
         if (io) io.emit("reserve:complete", { runId, dateInfo, results });
-        
+
         // Mark scheduledDays for the date
         const key = dateInfo.iso;
         st.scheduledDays[key] = windows;
@@ -570,7 +570,7 @@ app.post("/api/custom-schedule", async (req, res) => {
     try {
         const st = await readStore();
         const { reserveDate, windows, executionDate, executionHour, executionMinute } = req.body || {};
-        
+
         if (!reserveDate || !Array.isArray(windows) || windows.length === 0) {
             return res.status(400).json({ ok: false, error: "reserveDate and windows required" });
         }
@@ -586,8 +586,8 @@ app.post("/api/custom-schedule", async (req, res) => {
 
         // Store the custom schedule
         if (!st.customSchedules) st.customSchedules = [];
-        
-        const scheduleId = `cs-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+
+        const scheduleId = `cs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const schedule = {
             id: scheduleId,
             reserveDate: reserveDate,
@@ -608,7 +608,7 @@ app.post("/api/custom-schedule", async (req, res) => {
                 date: reserveDate,
                 window: w,
                 status: "scheduled",
-                message: `تایم‌بندی دلخواه برای ${executionDate} ساعت ${String(executionHour).padStart(2, '0')}:${String(executionMinute).padStart(2, '0')}`,
+                message: `زمان‌بندی دلخواه برای ${executionDate} ساعت ${String(executionHour).padStart(2, '0')}:${String(executionMinute).padStart(2, '0')}`,
                 timestamp: new Date().toISOString(),
                 jalaliDate: toJalaliString(new Date(reserveDate))
             });
@@ -627,7 +627,7 @@ app.delete("/api/custom-schedule/:id", async (req, res) => {
         const { id } = req.params;
 
         if (!st.customSchedules) st.customSchedules = [];
-        
+
         const index = st.customSchedules.findIndex(s => s.id === id);
         if (index === -1) {
             return res.status(404).json({ ok: false, error: "Schedule not found" });
@@ -654,11 +654,11 @@ const http = require('http');
     try {
         await initDatabase();
         console.log('[DB] Database initialized');
-        
+
         // ایجاد HTTP server برای Socket.io
         const httpServer = http.createServer(app);
         initSocketIO(httpServer);
-        
+
         // شروع task scheduler
         const scheduler = startScheduler(
             null,
@@ -668,7 +668,7 @@ const http = require('http');
             logReservation
         );
         console.log('[Scheduler] Task scheduler started');
-        
+
         httpServer.listen(port, () => console.log(`Anti-Kokh listening on http://localhost:${port}`));
     } catch (error) {
         console.error('[DB] Failed to start:', error.message);
