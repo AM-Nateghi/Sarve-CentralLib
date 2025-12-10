@@ -73,9 +73,44 @@ button,
 }
 
 .shimmer-bar {
-  background: linear-gradient(90deg, #e2e8f0 0%, #f8fafc 40%, #e2e8f0 80%);
+  background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%);
   background-size: 200% 100%;
   animation: shimmer 1.2s linear infinite;
+}
+
+/* Toast animations */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideOutDown {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+
+#toast {
+  transition: opacity 0.3s ease;
+  animation: slideInUp 0.3s ease-out;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 0 50px -12px rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+#toast.opacity-0 {
+  animation: slideOutDown 0.3s ease-in forwards;
 }
 
 /* Progress toast container & card */
@@ -84,7 +119,11 @@ button,
 }
 
 .progress-toast {
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 0 50px -12px rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  animation: slideInUp 0.3s ease-out;
+  transition: all 0.3s ease;
 }
 
 /* History collapse */

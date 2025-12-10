@@ -18,7 +18,7 @@
         integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <script src="https://cdn.kavenegar.com/sdk/page.js?appId=0ecfa240-c40d-43dd-8c85-95aa540c5feb" defer
         charset="utf-8"></script>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="style.css" />
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 to-slate-100 text-slate-800 overflow-x-hidden">
@@ -43,14 +43,14 @@
                             aria-label="باز کردن تنظیمات پیشرفته">🔧</button>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
                             <p class="text-xs text-slate-500 mb-1">شماره صندلی</p>
-                            <p id="seatDisplay" class="text-2xl font-bold text-indigo-600">—</p>
+                            <p id="seatDisplay" class="text-lg sm:text-2xl font-bold text-indigo-600">—</p>
                         </div>
-                        <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                        <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
                             <p class="text-xs text-slate-500 mb-1">حالت تاریخ</p>
-                            <p id="dateModeDisplay" class="text-2xl font-bold text-purple-600">—</p>
+                            <p id="dateModeDisplay" class="text-lg sm:text-2xl font-bold text-purple-600">—</p>
                         </div>
                     </div>
 
@@ -68,7 +68,7 @@
                         </button>
                         <button id="customScheduleBtn"
                             class="flex-1 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-600 text-white py-3 font-bold hover:shadow-lg transition transform hover:scale-[1.01] active:scale-95">
-                            ⏰ تایم‌بندی دلخواه
+                            ⏰ زمان‌بندی دلخواه
                         </button>
                         <button id="saveConfigBtn"
                             class="rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-900 px-5 py-3 font-semibold transition border border-slate-200">
@@ -89,11 +89,12 @@
                 <!-- Custom Schedules Section -->
                 <section class="bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-slate-100 p-6 space-y-4">
                     <div class="flex items-center justify-between mb-2 pb-3 border-b border-slate-100">
-                        <h2 class="text-lg sm:text-xl font-bold">⏰ تایم‌بندی‌های دلخواه</h2>
-                        <span class="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full">تایم‌بندی‌های ثبت شده</span>
+                        <h2 class="text-lg sm:text-xl font-bold">⏰ زمان‌بندی‌های دلخواه</h2>
+                        <span class="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full">زمان‌بندی‌های ثبت
+                            شده</span>
                     </div>
                     <div id="customSchedulesContainer" class="space-y-3">
-                        <p class="text-sm text-slate-500 text-center py-4">هیچ تایم‌بندی دلخواهی ثبت نشده است</p>
+                        <p class="text-sm text-slate-500 text-center py-4">هیچ زمان‌بندی دلخواهی ثبت نشده است</p>
                     </div>
                 </section>
 
@@ -135,7 +136,7 @@
                         </div>
                     </div>
                     <div id="historyWrapper"
-                        class="hidden sm:block overflow-x-auto max-h-80 sm:max-h-96 overflow-y-auto rounded-xl border border-slate-100">
+                        class="hidden sm:block overflow-x-auto max-h-80 overflow-y-auto rounded-xl border border-slate-100">
                         <table class="w-full text-sm">
                             <thead>
                                 <tr class="border-b border-slate-200">
@@ -286,7 +287,7 @@
         class="fixed inset-0 modal-backdrop opacity-0 pointer-events-none transition-opacity z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-fade-in max-h-[90vh] overflow-y-auto">
             <div class="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
-                <h2 class="text-2xl font-bold">⏰ تایم‌بندی دلخواه</h2>
+                <h2 class="text-2xl font-bold">⏰ زمان‌بندی دلخواه</h2>
                 <button id="closeCustomScheduleBtn" class="text-2xl text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
@@ -335,7 +336,7 @@
                 <!-- Schedule Button -->
                 <button id="submitCustomScheduleBtn"
                     class="w-full rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white py-3 font-bold hover:shadow-lg transition">
-                    ✓ ثبت تایم‌بندی
+                    ✓ ثبت زمان‌بندی
                 </button>
             </div>
         </div>

@@ -73,7 +73,16 @@ function showToast(message, isSuccess = true) {
     $("#toastMessage").text(`${icon} ${message}`);
     $toast.removeClass("bg-red-600 bg-slate-900").addClass(isSuccess ? "bg-slate-900" : "bg-red-600");
     $toast.removeClass("opacity-0");
-    setTimeout(() => $toast.addClass("opacity-0"), 3000);
+    
+    // Cancel any existing timeout
+    if ($toast.data('timeout')) clearTimeout($toast.data('timeout'));
+    
+    // Auto-hide after 3 seconds
+    const timeout = setTimeout(() => {
+        $toast.addClass("opacity-0");
+    }, 3000);
+    
+    $toast.data('timeout', timeout);
 }
 
 // Gamble modal helpers - REMOVED
@@ -143,19 +152,23 @@ function ensureProgressToast(key, title) {
                 </div>
             `);
     $container.append($wrap);
-    progressToasts.set(key, $wrap[0]);
+    progressToasts.set(key, { el: $wrap[0], $el: $wrap, timeout: null });
     reorderProgressToasts();
     return $wrap[0];
 }
 
 function reorderProgressToasts() {
     const $container = $("#progressToastContainer");
-    Array.from(progressToasts.values()).forEach((el) => $container.append(el));
+    progressToasts.forEach((item) => {
+        $container.append(item.el);
+    });
 }
 
 function updateProgressToast(key, { title, message, percent, status }) {
-    const el = ensureProgressToast(key, title || "رزرو");
-    const $el = $(el);
+    const item = progressToasts.get(key);
+    if (!item) return ensureProgressToast(key, title || "رزرو");
+    
+    const $el = item.$el;
     if (title) $el.find('[data-title]').text(title);
     if (message) $el.find('[data-message]').text(message);
     if (typeof percent === "number") {
@@ -169,10 +182,17 @@ function updateProgressToast(key, { title, message, percent, status }) {
     }
     if (status === "done" || status === "error") {
         $el.find('[data-bar]').removeClass("shimmer-bar");
-        setTimeout(() => {
-            $el.remove();
-            progressToasts.delete(key);
-            reorderProgressToasts();
+        
+        // Cancel existing timeout if any
+        if (item.timeout) clearTimeout(item.timeout);
+        
+        // Auto-remove after 3 seconds
+        item.timeout = setTimeout(() => {
+            $el.fadeOut(300, function() {
+                $(this).remove();
+                progressToasts.delete(key);
+                reorderProgressToasts();
+            });
         }, 3000);
     }
 }
@@ -245,7 +265,7 @@ function renderCustomSchedules(schedules) {
     $container.empty();
 
     if (!schedules || schedules.length === 0) {
-        $container.html('<p class="text-sm text-slate-500 text-center py-4">هیچ تایم‌بندی دلخواهی ثبت نشده است</p>');
+        $container.html('<p class="text-sm text-slate-500 text-center py-4">هیچ زمان‌بندی دلخواهی ثبت نشده است</p>');
         return;
     }
 
@@ -258,8 +278,8 @@ function renderCustomSchedules(schedules) {
         const executionD = new Date(executionDate);
         const executionShamsi = jalaliOf(executionD);
         const statusBadge = schedule.executed 
-            ? '<span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">✓ اجرا شد</span>'
-            : '<span class="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">⏳ درانتظار</span>';
+            ? '<span class="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700">✓ ثبت‌شده</span>'
+            : '<span class="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">⏳ زمان‌بندی شده</span>';
 
         const $card = $(`
             <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -383,9 +403,15 @@ function renderWeekTable(cfg) {
         const isToday = i === 0;
         const isTomorrow = i === 1;
         const windowsText = scheduled.length > 0 ? scheduled.join(", ") : "—";
-        const isScheduled = Boolean(scheduled.length);
-        const badgeClass = isScheduled ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600";
-        const badgeLabel = isScheduled ? "✓ تایم‌بندی شده" : "خالی";
+        
+        // Determine status based on scheduledDays or custom schedules
+        let badgeClass = "bg-slate-100 text-slate-600";
+        let badgeLabel = "خالی";
+        
+        if (scheduled.length > 0) {
+            badgeClass = "bg-yellow-100 text-yellow-700";
+            badgeLabel = "📅 زمان‌بندی شده";
+        }
 
         $tbody.append(`
           <tr class="hover:bg-slate-50 transition">
