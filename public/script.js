@@ -95,7 +95,8 @@ function buildCustomScheduleUI() {
     for (let i = 0; i < 10; i++) {
         const d = new Date();
         d.setDate(now.getDate() + i);
-        const iso = d.toISOString().slice(0, 10);
+        // Use local date components to avoid UTC shift issues
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const label = jalaliOf(d);
         const badge = i === 0 ? "(امروز)" : i === 1 ? "(فردا)" : "";
         const $btn = $(`<button type="button" class="w-full border rounded-lg p-2 text-sm hover:border-blue-500 hover:bg-blue-50 transition flex flex-col items-start gap-1" data-date="${iso}">
@@ -130,7 +131,9 @@ function buildCustomScheduleUI() {
     // Set default execution time
     const tomorrow = new Date();
     tomorrow.setDate(now.getDate() + 1);
-    $("#executionDateInput").val(tomorrow.toISOString().slice(0, 10));
+    // Local ISO for execution date to avoid timezone off-by-one
+    const tomorrowIso = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+    $("#executionDateInput").val(tomorrowIso);
     $("#executionHourInput").val("07");
     $("#executionMinuteInput").val("00");
 }
@@ -408,7 +411,7 @@ function renderWeekTable(cfg) {
     for (let i = 0; i <= 9; i++) {
         const d = new Date();
         d.setDate(now.getDate() + i);
-        const iso = d.toISOString().slice(0, 10);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const scheduled = cfg.scheduledDays?.[iso] || [];
         const shamsi = jalaliOf(d);
         const isToday = i === 0;

@@ -382,30 +382,8 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null) {
     return { dateInfo, results };
 }
 
-// -------------------- Scheduler (07:01 daily for selected day mode) --------------------
-let schedulerTimer = null;
-function scheduleDaily() {
-    if (schedulerTimer) clearInterval(schedulerTimer);
-    schedulerTimer = setInterval(async () => {
-        const store = await readStore();
-        const now = dayjs();
-        const target = now.hour() === 7 && now.minute() === 1;
-        if (!target) return;
-        const labels = store.selectedWindows && store.selectedWindows.length ? store.selectedWindows : [];
-        if (!labels.length) return;
-        try {
-            const { results, dateInfo } = await reserveSeatFlow(store, labels);
-            console.log(`[Scheduler] ${dateInfo.iso} ->`, results);
-            // mark scheduledDays
-            const key = dateInfo.iso;
-            store.scheduledDays[key] = labels;
-            await writeStore(store);
-        } catch (e) {
-            console.error("[Scheduler] error:", e.message);
-        }
-    }, 10 * 1000); // check every 10s (you can change to 30s/60s)
-}
-scheduleDaily();
+// -------------------- Scheduler (new unified scheduler in scheduler.js is used) --------------------
+// Legacy inline scheduler removed to prevent duplicate executions.
 
 // No embedded HTML - serving from public/index.html now
 
