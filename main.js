@@ -446,7 +446,7 @@ app.get("/", (req, res) => {
     const sessionToken = req.cookies.sessionToken;
 
     if (!userId || !sessionToken) {
-        return res.redirect('/signin.html');
+        return res.redirect('/signin');
     }
 
     res.sendFile(__dirname + "/public/index.html");
@@ -632,7 +632,7 @@ app.get("/admin", (req, res) => {
 });
 
 // Serve signin.html
-app.get("/signin.html", (req, res) => {
+app.get("/signin", (req, res) => {
     res.sendFile(__dirname + "/public/signin.html");
 });
 
