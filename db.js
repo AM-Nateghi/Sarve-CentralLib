@@ -21,7 +21,7 @@ async function initDatabase() {
     try {
         const connection = await pool.getConnection();
 
-        // جدول تنظیمات (settings)
+        // جدول تنظیمات (settings) - برای مقادیر سراسری
         await connection.query(`
             CREATE TABLE IF NOT EXISTS settings (
                 id INT PRIMARY KEY AUTO_INCREMENT,
@@ -31,10 +31,47 @@ async function initDatabase() {
             )
         `);
 
+        // جدول کاربران (users)
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_username (username),
+                INDEX idx_status (status)
+            )
+        `);
+
+        // جدول تنظیمات کاربران (user_configs)
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS user_configs (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                user_id INT NOT NULL UNIQUE,
+                seat_priority VARCHAR(255),
+                sc VARCHAR(255),
+                concurrency INT DEFAULT 3,
+                requestStartSpreadMs INT DEFAULT 400,
+                reserveDateMode VARCHAR(20) DEFAULT 'today',
+                selectedWindows JSON,
+                scheduledDays JSON,
+                customSchedules JSON,
+                lastMonthQuota TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user (user_id)
+            )
+        `);
+
         // جدول لاگ رزروها (reservation_logs)
         await connection.query(`
             CREATE TABLE IF NOT EXISTS reservation_logs (
                 id INT PRIMARY KEY AUTO_INCREMENT,
+                user_id INT,
+                username VARCHAR(100),
                 entry_id VARCHAR(100),
                 date DATE NOT NULL,
                 window VARCHAR(20),
@@ -44,9 +81,12 @@ async function initDatabase() {
                 timestamp DATETIME NOT NULL,
                 jalali_date VARCHAR(20),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
                 INDEX idx_date (date),
                 INDEX idx_status (status),
-                INDEX idx_entry (entry_id)
+                INDEX idx_entry (entry_id),
+                INDEX idx_user_id (user_id),
+                INDEX idx_username (username)
             )
         `);
 
@@ -113,6 +153,8 @@ async function getAllSettings() {
 // -------------------- توابع مدیریت لاگ‌ها --------------------
 async function logReservation(data) {
     const {
+        user_id,
+        username,
         date,
         window,
         status,
@@ -134,9 +176,9 @@ async function logReservation(data) {
 
         await pool.query(
             `INSERT INTO reservation_logs 
-            (entry_id, date, window, status, message, error, timestamp, jalali_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [entryId, date, window, status, message || '', error || null, datetimeValue, jalaliDate]
+            (user_id, username, entry_id, date, window, status, message, error, timestamp, jalali_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [user_id || null, username || null, entryId, date, window, status, message || '', error || null, datetimeValue, jalaliDate]
         );
     } catch (err) {
         console.error('[DB] Failed to log reservation:', err.message);
@@ -238,6 +280,169 @@ async function writeStore(store) {
     }
 }
 
+// -------------------- توابع مدیریت کاربران --------------------
+async function createUser(username, passwordHash) {
+    try {
+        const [result] = await pool.query(
+            `INSERT INTO users (username, password, status) VALUES (?, ?, 'pending')`,
+            [username, passwordHash]
+        );
+        return result.insertId;
+    } catch (error) {
+        console.error('[DB] Failed to create user:', error.message);
+        throw error;
+    }
+}
+
+async function getUserByUsername(username) {
+    try {
+        const [rows] = await pool.query(
+            `SELECT id, username, password, status, created_at FROM users WHERE username = ?`,
+            [username]
+        );
+        return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+        console.error('[DB] Failed to get user by username:', error.message);
+        return null;
+    }
+}
+
+async function getUserById(userId) {
+    try {
+        const [rows] = await pool.query(
+            `SELECT id, username, status, created_at FROM users WHERE id = ?`,
+            [userId]
+        );
+        return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+        console.error('[DB] Failed to get user by id:', error.message);
+        return null;
+    }
+}
+
+async function getAllUsers(statusFilter = null) {
+    try {
+        let query = `SELECT id, username, status, created_at FROM users`;
+        let params = [];
+
+        if (statusFilter) {
+            query += ` WHERE status = ?`;
+            params.push(statusFilter);
+        }
+
+        query += ` ORDER BY created_at DESC`;
+        const [rows] = await pool.query(query, params);
+        return rows;
+    } catch (error) {
+        console.error('[DB] Failed to get all users:', error.message);
+        return [];
+    }
+}
+
+async function updateUserStatus(userId, status) {
+    try {
+        await pool.query(
+            `UPDATE users SET status = ? WHERE id = ?`,
+            [status, userId]
+        );
+    } catch (error) {
+        console.error('[DB] Failed to update user status:', error.message);
+        throw error;
+    }
+}
+
+async function deleteUser(userId) {
+    try {
+        await pool.query(`DELETE FROM users WHERE id = ?`, [userId]);
+    } catch (error) {
+        console.error('[DB] Failed to delete user:', error.message);
+        throw error;
+    }
+}
+
+// -------------------- توابع مدیریت تنظیمات کاربر --------------------
+async function createUserConfig(userId, config) {
+    try {
+        await pool.query(
+            `INSERT INTO user_configs (
+                user_id, seat_priority, sc, concurrency, 
+                requestStartSpreadMs, reserveDateMode, selectedWindows, 
+                scheduledDays, customSchedules, lastMonthQuota
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                userId,
+                config.seat_priority ? config.seat_priority.join(',') : '',
+                config.sc || '',
+                config.concurrency || 3,
+                config.requestStartSpreadMs || 400,
+                config.reserveDateMode || 'today',
+                JSON.stringify(config.selectedWindows || []),
+                JSON.stringify(config.scheduledDays || {}),
+                JSON.stringify(config.customSchedules || []),
+                config.lastMonthQuota || null
+            ]
+        );
+    } catch (error) {
+        console.error('[DB] Failed to create user config:', error.message);
+        throw error;
+    }
+}
+
+async function getUserConfig(userId) {
+    try {
+        const [rows] = await pool.query(
+            `SELECT * FROM user_configs WHERE user_id = ?`,
+            [userId]
+        );
+        if (rows.length === 0) return null;
+
+        const row = rows[0];
+        return {
+            user_id: row.user_id,
+            seat_priority: row.seat_priority ? row.seat_priority.split(',').map(s => parseInt(s, 10)) : [],
+            sc: row.sc,
+            concurrency: row.concurrency,
+            requestStartSpreadMs: row.requestStartSpreadMs,
+            reserveDateMode: row.reserveDateMode,
+            selectedWindows: row.selectedWindows ? JSON.parse(row.selectedWindows) : [],
+            scheduledDays: row.scheduledDays ? JSON.parse(row.scheduledDays) : {},
+            customSchedules: row.customSchedules ? JSON.parse(row.customSchedules) : [],
+            lastMonthQuota: row.lastMonthQuota
+        };
+    } catch (error) {
+        console.error('[DB] Failed to get user config:', error.message);
+        return null;
+    }
+}
+
+async function updateUserConfig(userId, config) {
+    try {
+        await pool.query(
+            `UPDATE user_configs SET
+                seat_priority = ?, sc = ?, concurrency = ?,
+                requestStartSpreadMs = ?, reserveDateMode = ?,
+                selectedWindows = ?, scheduledDays = ?,
+                customSchedules = ?, lastMonthQuota = ?
+             WHERE user_id = ?`,
+            [
+                config.seat_priority ? config.seat_priority.join(',') : '',
+                config.sc || '',
+                config.concurrency || 3,
+                config.requestStartSpreadMs || 400,
+                config.reserveDateMode || 'today',
+                JSON.stringify(config.selectedWindows || []),
+                JSON.stringify(config.scheduledDays || {}),
+                JSON.stringify(config.customSchedules || []),
+                config.lastMonthQuota || null,
+                userId
+            ]
+        );
+    } catch (error) {
+        console.error('[DB] Failed to update user config:', error.message);
+        throw error;
+    }
+}
+
 module.exports = {
     pool,
     initDatabase,
@@ -248,5 +453,14 @@ module.exports = {
     getHistory,
     getHistoryByDate,
     readStore,
-    writeStore
+    writeStore,
+    createUser,
+    getUserByUsername,
+    getUserById,
+    getAllUsers,
+    updateUserStatus,
+    deleteUser,
+    createUserConfig,
+    getUserConfig,
+    updateUserConfig
 };

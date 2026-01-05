@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+
+<head>
+    <meta charset="utf-8" />
+    <title>ورود و ثبت نام</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
+    <meta name="theme-color" content="#4f46e5" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%232c3e50'/%3E%3Ctext x='32' y='40' font-size='26' text-anchor='middle' fill='white' font-family='Arial'%3EAK%3C/text%3E%3C/svg%3E" />
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"
+        integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 text-slate-800 overflow-x-hidden">
+    <div class="min-h-screen flex items-center justify-center px-4">
+        <div
+            class="max-w-md w-full bg-white/80 backdrop-blur rounded-2xl shadow-lg border border-slate-100 p-8 space-y-6">
+            <!-- Header -->
+            <div class="text-center space-y-2">
+                <h1
+                    class="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                    سیستم ضدکخ</h1>
+                <p class="text-slate-500 text-sm">رزرو هوشمند صندلی کتابخانه</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex gap-3 mb-6">
+                <button id="signinTab"
+                    class="flex-1 py-2 px-4 rounded-lg font-semibold transition text-slate-700 bg-slate-100 hover:bg-slate-200">ورود</button>
+                <button id="signupTab"
+                    class="flex-1 py-2 px-4 rounded-lg font-semibold transition text-slate-600 hover:bg-slate-100">ثبت
+                    نام</button>
+            </div>
+
+            <!-- Sign In Form -->
+            <div id="signinForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-2">نام کاربری</label>
+                    <input id="signinUsername" type="text" placeholder="نام کاربری خود را وارد کنید"
+                        class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2">رمز عبور</label>
+                    <input id="signinPassword" type="password" placeholder="رمز عبور"
+                        class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
+                </div>
+                <button id="signinBtn"
+                    class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 rounded-lg font-bold hover:shadow-lg transition">ورود</button>
+                <div id="signinMessage" class="text-center text-sm"></div>
+            </div>
+
+            <!-- Sign Up Form -->
+            <div id="signupForm" class="space-y-4 hidden">
+                <div>
+                    <label class="block text-sm font-semibold mb-2">نام کاربری</label>
+                    <input id="signupUsername" type="text" placeholder="یک نام کاربری انتخاب کنید"
+                        class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2">رمز عبور</label>
+                    <input id="signupPassword" type="password" placeholder="رمز عبور قوی"
+                        class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2">کد سرویس</label>
+                    <input id="signupSc" type="text" placeholder="کد سرویس خود را وارد کنید"
+                        class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2">اولویت صندلی‌ها (جدا شده با کاما)</label>
+                    <input id="signupSeatPriority" type="text" placeholder="مثال: 33,32,34,37,42"
+                        class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
+                </div>
+                <button id="signupBtn"
+                    class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 rounded-lg font-bold hover:shadow-lg transition">ثبت
+                    نام</button>
+                <div id="signupMessage" class="text-center text-sm"></div>
+            </div>
+
+            <!-- Info Message -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
+                <p>بعد از ثبت نام، کاربر باید توسط مدیریت تایید شود.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            const TIME_WINDOWS = ["8-11", "11-14", "14-17", "17-20", "20-21"];
+
+            // Tab switching
+            $('#signinTab').on('click', function () {
+                $('#signinForm').removeClass('hidden');
+                $('#signupForm').addClass('hidden');
+                $('#signinTab').addClass('bg-slate-100').removeClass('hover:bg-slate-100');
+                $('#signupTab').removeClass('bg-slate-100').addClass('hover:bg-slate-100');
+            });
+
+            $('#signupTab').on('click', function () {
+                $('#signupForm').removeClass('hidden');
+                $('#signinForm').addClass('hidden');
+                $('#signupTab').addClass('bg-slate-100').removeClass('hover:bg-slate-100');
+                $('#signinTab').removeClass('bg-slate-100').addClass('hover:bg-slate-100');
+            });
+
+            // Sign In
+            $('#signinBtn').on('click', async function () {
+                const username = $('#signinUsername').val().trim();
+                const password = $('#signinPassword').val().trim();
+
+                if (!username || !password) {
+                    showMessage('#signinMessage', 'لطفا تمام فیلد‌ها را پر کنید', false);
+                    return;
+                }
+
+                try {
+                    const response = await $.ajax({
+                        type: 'POST',
+                        url: '/api/auth/signin',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ username, password })
+                    });
+
+                    showMessage('#signinMessage', 'ورود موفق!', true);
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } catch (error) {
+                    const msg = error.responseJSON?.error || 'خطا در ورود';
+                    showMessage('#signinMessage', msg, false);
+                }
+            });
+
+            // Sign Up
+            $('#signupBtn').on('click', async function () {
+                const username = $('#signupUsername').val().trim();
+                const password = $('#signupPassword').val().trim();
+                const sc = $('#signupSc').val().trim();
+                const seatPriorityStr = $('#signupSeatPriority').val().trim();
+
+                if (!username || !password || !sc || !seatPriorityStr) {
+                    showMessage('#signupMessage', 'لطفا تمام فیلد‌های الزامی را پر کنید', false);
+                    return;
+                }
+
+                // Parse seat priority
+                const seatPriority = seatPriorityStr.split(',').map(s => {
+                    const num = parseInt(s.trim(), 10);
+                    return isNaN(num) ? null : num;
+                }).filter(n => n !== null);
+
+                if (seatPriority.length === 0) {
+                    showMessage('#signupMessage', 'اولویت صندلی نامعتبر است', false);
+                    return;
+                }
+
+                try {
+                    const response = await $.ajax({
+                        type: 'POST',
+                        url: '/api/auth/signup',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            username,
+                            password,
+                            sc,
+                            seat_priority: seatPriority
+                        })
+                    });
+
+                    showMessage('#signupMessage', 'ثبت نام موفق! منتظر تایید مدیریت باشید.', true);
+                    setTimeout(() => {
+                        $('#signupUsername').val('');
+                        $('#signupPassword').val('');
+                        $('#signupSc').val('');
+                        $('#signupSeatPriority').val('');
+                        $('#signinTab').click();
+                    }, 2000);
+                } catch (error) {
+                    const msg = error.responseJSON?.error || 'خطا در ثبت نام';
+                    showMessage('#signupMessage', msg, false);
+                }
+            });
+
+            function showMessage(selector, msg, isSuccess) {
+                const $el = $(selector);
+                $el.text(msg);
+                $el.removeClass('text-red-600 text-green-600');
+                $el.addClass(isSuccess ? 'text-green-600' : 'text-red-600');
+            }
+        });
+    </script>
+</body>
+
+</html>

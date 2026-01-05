@@ -1,21 +1,32 @@
 // server.js
-// Install: npm install express cors body-parser dayjs fs axios tough-cookie axios-cookiejar-support cheerio node-cron mysql2
+// Install: npm install express cors body-parser dayjs fs axios tough-cookie axios-cookiejar-support cheerio node-cron mysql2 dotenv bcryptjs cookie-parser
 // Run: node server.js
 
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const cookieParser = require("cookie-parser");
 const dayjs = require("dayjs");
 const axios = require("axios");
 const tough = require("tough-cookie");
 const { wrapper } = require("axios-cookiejar-support");
 const cheerio = require("cheerio");
-const { initDatabase, logReservation, getHistory, getHistoryByDate, readStore, writeStore } = require("./db");
+const bcrypt = require("bcryptjs");
+const dotenv = require("dotenv");
+const {
+    initDatabase, logReservation, getHistory, getHistoryByDate, readStore, writeStore,
+    createUser, getUserByUsername, getUserById, getAllUsers, updateUserStatus, deleteUser,
+    createUserConfig, getUserConfig, updateUserConfig
+} = require("./db");
 const { startScheduler } = require("./scheduler");
 const { Server } = require("socket.io");
 
+// Load .env
+dotenv.config();
+
 // Global WebSocket instance
 let io = null;
+let ADMIN_PASSWORD_CACHED = null;
 
 // Emit progress updates over WebSocket if available
 function emitProgress(runId, label, step, totalSteps, message, status = "progress") {
@@ -286,7 +297,7 @@ async function runWithConcurrency(tasks, concurrency) {
     return results;
 }
 
-async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null) {
+async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null, userId = null, username = null) {
     // ensure global client exists
     if (!GLOBAL_CLIENT) GLOBAL_CLIENT = buildClient();
 
@@ -346,6 +357,8 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null) {
             const windowLabel = err.label || "unknown";
             results.push({ label: windowLabel, success: false, message: err.message || String(err) });
             await logReservation({
+                user_id: userId,
+                username: username,
                 date: dateInfo.iso,
                 window: windowLabel,
                 status: "failed",
@@ -358,6 +371,8 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null) {
         } else if (tr) {
             results.push({ label: tr.label, success: tr.success, message: tr.message });
             await logReservation({
+                user_id: userId,
+                username: username,
                 date: dateInfo.iso,
                 window: tr.label || "unknown",
                 status: tr.success ? "success" : "failed",
@@ -372,13 +387,6 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null) {
         }
     }
 
-    // optional: parse quota from messages
-    const quotaMsg = results.find(x => x.success && /سهم|باقی مانده/.test(x.message));
-    if (quotaMsg) {
-        store.lastMonthQuota = quotaMsg.message;
-        await writeStore(store);
-    }
-
     return { dateInfo, results };
 }
 
@@ -391,13 +399,241 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null) {
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
+app.use(cookieParser());
+
+// ==================== Middleware ====================
+// Auth Middleware - بررسی کوکی صحیح 7روزه
+async function authMiddleware(req, res, next) {
+    const userId = req.cookies.userId;
+    const sessionToken = req.cookies.sessionToken;
+
+    if (!userId || !sessionToken) {
+        return res.status(401).json({ ok: false, error: "Not authenticated" });
+    }
+
+    // Verify user exists and is approved
+    const user = await getUserById(userId);
+    if (!user || user.status !== 'approved') {
+        res.clearCookie('userId');
+        res.clearCookie('sessionToken');
+        return res.status(401).json({ ok: false, error: "User not approved or not found" });
+    }
+
+    // Store user info in request
+    req.userId = userId;
+    req.username = user.username;
+    next();
+}
+
+// Admin Auth Middleware - بررسی رمز عبور ادمین
+function adminAuthMiddleware(req, res, next) {
+    const adminToken = req.cookies.adminToken;
+
+    if (!adminToken || adminToken !== 'admin_verified') {
+        return res.status(401).json({ ok: false, error: "Admin not authenticated" });
+    }
+
+    next();
+}
 
 // Serve static files from public folder
 app.use(express.static("public"));
 
-// Serve the index.html for root path
+// Serve the index.html for root path (protected)
 app.get("/", (req, res) => {
+    // Check auth
+    const userId = req.cookies.userId;
+    const sessionToken = req.cookies.sessionToken;
+
+    if (!userId || !sessionToken) {
+        return res.redirect('/signin.html');
+    }
+
     res.sendFile(__dirname + "/public/index.html");
+});
+
+// ==================== Auth Endpoints ====================
+// Sign Up
+app.post("/api/auth/signup", async (req, res) => {
+    try {
+        const { username, password, sc, seat_priority } = req.body;
+
+        // Validation
+        if (!username || !password || !sc || !Array.isArray(seat_priority) || seat_priority.length === 0) {
+            return res.status(400).json({ ok: false, error: "Missing required fields" });
+        }
+
+        // Check if user exists
+        const existingUser = await getUserByUsername(username);
+        if (existingUser) {
+            return res.status(400).json({ ok: false, error: "User already exists" });
+        }
+
+        // Hash password
+        const passwordHash = await bcrypt.hash(password, 10);
+
+        // Create user
+        const userId = await createUser(username, passwordHash);
+
+        // Create user config
+        await createUserConfig(userId, {
+            seat_priority,
+            sc,
+            concurrency: 3,
+            requestStartSpreadMs: 400,
+            reserveDateMode: 'today',
+            selectedWindows: [],
+            scheduledDays: {},
+            customSchedules: [],
+            lastMonthQuota: null
+        });
+
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[Auth] Sign up error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// Sign In
+app.post("/api/auth/signin", async (req, res) => {
+    try {
+        const { username, password } = req.body;
+
+        if (!username || !password) {
+            return res.status(400).json({ ok: false, error: "Username and password required" });
+        }
+
+        // Get user from database
+        const user = await getUserByUsername(username);
+        if (!user) {
+            return res.status(401).json({ ok: false, error: "Invalid credentials" });
+        }
+
+        // Check status
+        if (user.status !== 'approved') {
+            return res.status(401).json({ ok: false, error: "User not approved yet" });
+        }
+
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+            return res.status(401).json({ ok: false, error: "Invalid credentials" });
+        }
+
+        // Set 7-day cookie
+        const expiresIn = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+        const sessionToken = `token_${user.id}_${Date.now()}`;
+
+        res.cookie('userId', user.id, {
+            httpOnly: true,
+            maxAge: expiresIn,
+            sameSite: 'lax'
+        });
+
+        res.cookie('sessionToken', sessionToken, {
+            httpOnly: true,
+            maxAge: expiresIn,
+            sameSite: 'lax'
+        });
+
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[Auth] Sign in error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// Sign Out
+app.post("/api/auth/signout", (req, res) => {
+    res.clearCookie('userId');
+    res.clearCookie('sessionToken');
+    res.json({ ok: true });
+});
+
+// ==================== Admin Endpoints ====================
+// Admin Verify (read .env on each request for admin password)
+app.post("/api/admin/verify", (req, res) => {
+    try {
+        const { password } = req.body;
+
+        if (!password) {
+            return res.status(400).json({ ok: false, error: "Password required" });
+        }
+
+        // Read from .env on each request
+        const envAdminPassword = process.env.ADMIN_PASSWORD;
+
+        if (password !== envAdminPassword) {
+            return res.status(401).json({ ok: false, error: "Invalid password" });
+        }
+
+        // Set 30-minute admin cookie
+        const expiresIn = 30 * 60 * 1000; // 30 minutes in ms
+
+        res.cookie('adminToken', 'admin_verified', {
+            httpOnly: true,
+            maxAge: expiresIn,
+            sameSite: 'lax'
+        });
+
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[Admin] Verify error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// Get all users (with optional status filter)
+app.get("/api/admin/users", adminAuthMiddleware, async (req, res) => {
+    try {
+        const status = req.query.status || null;
+        const users = await getAllUsers(status);
+        res.json({ ok: true, users });
+    } catch (error) {
+        console.error('[Admin] Get users error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// Update user status
+app.post("/api/admin/users/:userId/status", adminAuthMiddleware, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { status } = req.body;
+
+        if (!['pending', 'approved', 'rejected'].includes(status)) {
+            return res.status(400).json({ ok: false, error: "Invalid status" });
+        }
+
+        await updateUserStatus(userId, status);
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[Admin] Update user status error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// Delete user
+app.delete("/api/admin/users/:userId", adminAuthMiddleware, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        await deleteUser(userId);
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[Admin] Delete user error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+// Serve admin.html (no protection for now, admins verify with password modal)
+app.get("/admin", (req, res) => {
+    res.sendFile(__dirname + "/public/admin.html");
+});
+
+// Serve signin.html
+app.get("/signin.html", (req, res) => {
+    res.sendFile(__dirname + "/public/signin.html");
 });
 
 // ==================== WebSocket Setup ====================
@@ -418,135 +654,197 @@ function initSocketIO(httpServer) {
     return io;
 }
 
-// Get full config
-app.get("/api/config", async (req, res) => {
-    const st = await readStore();
-    res.json({
-        username: st.username,
-        passwd: st.passwd,
-        seat_number: st.seat_number,
-        seat_priority: st.seat_priority || [33, 32, 34, 37, 42],
-        concurrency: st.concurrency || 5,
-        requestStartSpreadMs: st.requestStartSpreadMs || 400,
-        sc: st.sc,
-        reserveDateMode: st.reserveDateMode,
-        selectedWindows: st.selectedWindows || [],
-        scheduledDays: st.scheduledDays || {},
-        customSchedules: st.customSchedules || [],
-        lastMonthQuota: st.lastMonthQuota || null
-    });
+// Get full config (per user)
+app.get("/api/config", authMiddleware, async (req, res) => {
+    try {
+        const userConfig = await getUserConfig(req.userId);
+        if (!userConfig) {
+            return res.status(404).json({ ok: false, error: "User config not found" });
+        }
+
+        res.json({
+            seat_priority: userConfig.seat_priority || [33, 32, 34, 37, 42],
+            concurrency: userConfig.concurrency || 3,
+            requestStartSpreadMs: userConfig.requestStartSpreadMs || 400,
+            sc: userConfig.sc,
+            reserveDateMode: userConfig.reserveDateMode,
+            selectedWindows: userConfig.selectedWindows || [],
+            scheduledDays: userConfig.scheduledDays || {},
+            customSchedules: userConfig.customSchedules || [],
+            lastMonthQuota: userConfig.lastMonthQuota || null
+        });
+    } catch (error) {
+        console.error('[API] Get config error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
 });
 
-// Update main config (seat_number, seat_priority, reserveDateMode, selectedWindows)
-app.post("/api/config", async (req, res) => {
-    const st = await readStore();
-    const { seat_number, seat_priority, reserveDateMode, selectedWindows, concurrency, requestStartSpreadMs } = req.body || {};
+// Update main config (seat_priority, reserveDateMode, selectedWindows)
+app.post("/api/config", authMiddleware, async (req, res) => {
+    try {
+        const userConfig = await getUserConfig(req.userId);
+        if (!userConfig) {
+            return res.status(404).json({ ok: false, error: "User config not found" });
+        }
 
-    if (seat_number) st.seat_number = parseInt(seat_number, 10);
-    if (Array.isArray(seat_priority)) st.seat_priority = seat_priority.map(s => parseInt(s, 10));
-    if (typeof concurrency !== 'undefined') st.concurrency = parseInt(concurrency, 10) || st.concurrency;
-    if (typeof requestStartSpreadMs !== 'undefined') st.requestStartSpreadMs = parseInt(requestStartSpreadMs, 10) || st.requestStartSpreadMs;
-    if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) st.reserveDateMode = reserveDateMode;
-    if (Array.isArray(selectedWindows)) st.selectedWindows = selectedWindows.filter(w => TIME_WINDOWS[w]);
+        const { seat_priority, reserveDateMode, selectedWindows, concurrency, requestStartSpreadMs } = req.body || {};
 
-    await writeStore(st);
-    res.json({ ok: true });
+        if (Array.isArray(seat_priority)) userConfig.seat_priority = seat_priority.map(s => parseInt(s, 10));
+        if (typeof concurrency !== 'undefined') userConfig.concurrency = parseInt(concurrency, 10) || userConfig.concurrency;
+        if (typeof requestStartSpreadMs !== 'undefined') userConfig.requestStartSpreadMs = parseInt(requestStartSpreadMs, 10) || userConfig.requestStartSpreadMs;
+        if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) userConfig.reserveDateMode = reserveDateMode;
+        if (Array.isArray(selectedWindows)) userConfig.selectedWindows = selectedWindows.filter(w => TIME_WINDOWS[w]);
+
+        await updateUserConfig(req.userId, userConfig);
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[API] Update config error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
 });
 
-// Update advanced settings (username, password, sc, etc)
-app.post("/api/settings", async (req, res) => {
-    const st = await readStore();
-    const { username, passwd, seat_number, seat_priority, sc, reserveDateMode, concurrency, requestStartSpreadMs } = req.body || {};
+// Update advanced settings (sc, etc)
+app.post("/api/settings", authMiddleware, async (req, res) => {
+    try {
+        const userConfig = await getUserConfig(req.userId);
+        if (!userConfig) {
+            return res.status(404).json({ ok: false, error: "User config not found" });
+        }
 
-    if (username) st.username = username;
-    if (passwd) st.passwd = passwd;
-    if (seat_number) st.seat_number = parseInt(seat_number, 10);
-    if (Array.isArray(seat_priority)) st.seat_priority = seat_priority.map(s => parseInt(s, 10));
-    if (typeof concurrency !== 'undefined') st.concurrency = parseInt(concurrency, 10) || st.concurrency;
-    if (typeof requestStartSpreadMs !== 'undefined') st.requestStartSpreadMs = parseInt(requestStartSpreadMs, 10) || st.requestStartSpreadMs;
-    if (sc) st.sc = sc;
-    if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) st.reserveDateMode = reserveDateMode;
+        const { sc, seat_priority, reserveDateMode, concurrency, requestStartSpreadMs } = req.body || {};
 
-    await writeStore(st);
-    res.json({ ok: true });
+        if (sc) userConfig.sc = sc;
+        if (Array.isArray(seat_priority)) userConfig.seat_priority = seat_priority.map(s => parseInt(s, 10));
+        if (typeof concurrency !== 'undefined') userConfig.concurrency = parseInt(concurrency, 10) || userConfig.concurrency;
+        if (typeof requestStartSpreadMs !== 'undefined') userConfig.requestStartSpreadMs = parseInt(requestStartSpreadMs, 10) || userConfig.requestStartSpreadMs;
+        if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) userConfig.reserveDateMode = reserveDateMode;
+
+        await updateUserConfig(req.userId, userConfig);
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[API] Update settings error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
 });
 
 // Schedule a specific day with windows
-app.post("/api/schedule-day", async (req, res) => {
-    const st = await readStore();
-    const { date, windows } = req.body || {};
-
-    if (!date) return res.status(400).json({ ok: false, error: "date required" });
-
-    if (!Array.isArray(windows) || windows.length === 0) {
-        // Delete if empty
-        delete st.scheduledDays[date];
-    } else {
-        const validWindows = windows.filter(w => TIME_WINDOWS[w]);
-        st.scheduledDays[date] = validWindows;
-
-        // Log scheduled status for each window
-        for (const w of validWindows) {
-            await logReservation({
-                date: date,
-                window: w,
-                status: "scheduled",
-                message: "زمان‌بندی شده برای اجرای خودکار",
-                timestamp: new Date().toISOString(),
-                jalaliDate: toJalaliString(new Date(date))
-            });
+app.post("/api/schedule-day", authMiddleware, async (req, res) => {
+    try {
+        const userConfig = await getUserConfig(req.userId);
+        if (!userConfig) {
+            return res.status(404).json({ ok: false, error: "User config not found" });
         }
-    }
 
-    await writeStore(st);
-    res.json({ ok: true });
+        const { date, windows } = req.body || {};
+
+        if (!date) return res.status(400).json({ ok: false, error: "date required" });
+
+        if (!Array.isArray(windows) || windows.length === 0) {
+            delete userConfig.scheduledDays[date];
+        } else {
+            const validWindows = windows.filter(w => TIME_WINDOWS[w]);
+            userConfig.scheduledDays[date] = validWindows;
+
+            // Log scheduled status for each window
+            for (const w of validWindows) {
+                await logReservation({
+                    user_id: req.userId,
+                    username: req.username,
+                    date: date,
+                    window: w,
+                    status: "scheduled",
+                    message: "زمان‌بندی شده برای اجرای خودکار",
+                    timestamp: new Date().toISOString(),
+                    jalaliDate: toJalaliString(new Date(date))
+                });
+            }
+        }
+
+        await updateUserConfig(req.userId, userConfig);
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('[API] Schedule day error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
 });
 
-// Reserve immediately for selected windows (or provided windows)
-app.post("/api/reserve", async (req, res) => {
+// Reserve immediately for selected windows
+app.post("/api/reserve", authMiddleware, async (req, res) => {
     try {
-        const st = await readStore();
-        const windows = Array.isArray(req.body.windows) ? req.body.windows.filter(w => TIME_WINDOWS[w]) : (st.selectedWindows || []);
+        const userConfig = await getUserConfig(req.userId);
+        if (!userConfig) {
+            return res.status(404).json({ ok: false, error: "User config not found" });
+        }
+
+        const windows = Array.isArray(req.body.windows) ? req.body.windows.filter(w => TIME_WINDOWS[w]) : (userConfig.selectedWindows || []);
         if (!windows.length) return res.status(400).json({ ok: false, error: "No windows selected" });
+
         const runId = `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
         // ارسال شروع رزرو به کلاینت‌ها
         if (io) io.emit("reserve:start", { runId, date: new Date().toISOString(), windows });
 
-        const { results, dateInfo } = await reserveSeatFlow(st, windows, runId);
+        // Prepare store object from user config for reserveSeatFlow
+        const storeForReserve = {
+            username: userConfig.sc ? userConfig.sc : req.username, // Use sc as username
+            passwd: "placeholder", // Placeholder
+            seat_priority: userConfig.seat_priority,
+            concurrency: userConfig.concurrency,
+            requestStartSpreadMs: userConfig.requestStartSpreadMs,
+            sc: userConfig.sc,
+            reserveDateMode: userConfig.reserveDateMode,
+            selectedWindows: windows
+        };
+
+        const { results, dateInfo } = await reserveSeatFlow(storeForReserve, windows, runId, null, req.userId, req.username);
 
         // ارسال نتایج
         if (io) io.emit("reserve:complete", { runId, dateInfo, results });
 
         // Mark scheduledDays for the date
         const key = dateInfo.iso;
-        st.scheduledDays[key] = windows;
-        await writeStore(st);
+        userConfig.scheduledDays[key] = windows;
+        await updateUserConfig(req.userId, userConfig);
         res.json({ ok: true, runId, date: dateInfo, results });
-    } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+    } catch (error) {
+        console.error('[API] Reserve error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
     }
 });
 
 // Get reservation history
-app.get("/api/history", async (req, res) => {
-    const limit = parseInt(req.query.limit) || 50;
-    const history = await getHistory(limit);
-    res.json({ ok: true, entries: history });
+app.get("/api/history", authMiddleware, async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 50;
+        // TODO: Add user-specific history query
+        const history = await getHistory(limit);
+        res.json({ ok: true, entries: history });
+    } catch (error) {
+        console.error('[API] Get history error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
 });
 
 // Get history for a specific date
-app.get("/api/history/:date", async (req, res) => {
-    const { date } = req.params;
-    const history = await getHistoryByDate(date);
-    res.json({ ok: true, entries: history });
+app.get("/api/history/:date", authMiddleware, async (req, res) => {
+    try {
+        const { date } = req.params;
+        const history = await getHistoryByDate(date);
+        res.json({ ok: true, entries: history });
+    } catch (error) {
+        console.error('[API] Get history by date error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
 });
 
-// Test/Gamble reserve (شنگول بازی) - REMOVED
 // Custom schedule with execution date and time
-app.post("/api/custom-schedule", async (req, res) => {
+app.post("/api/custom-schedule", authMiddleware, async (req, res) => {
     try {
-        const st = await readStore();
+        const userConfig = await getUserConfig(req.userId);
+        if (!userConfig) {
+            return res.status(404).json({ ok: false, error: "User config not found" });
+        }
+
         const { reserveDate, windows, executionDate, executionHour, executionMinute } = req.body || {};
 
         if (!reserveDate || !Array.isArray(windows) || windows.length === 0) {
@@ -563,7 +861,7 @@ app.post("/api/custom-schedule", async (req, res) => {
         }
 
         // Store the custom schedule
-        if (!st.customSchedules) st.customSchedules = [];
+        if (!userConfig.customSchedules) userConfig.customSchedules = [];
 
         const scheduleId = `cs-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const schedule = {
@@ -577,12 +875,14 @@ app.post("/api/custom-schedule", async (req, res) => {
             executed: false
         };
 
-        st.customSchedules.push(schedule);
-        await writeStore(st);
+        userConfig.customSchedules.push(schedule);
+        await updateUserConfig(req.userId, userConfig);
 
         // Log for each window
         for (const w of schedule.windows) {
             await logReservation({
+                user_id: req.userId,
+                username: req.username,
                 date: reserveDate,
                 window: w,
                 status: "scheduled",
@@ -593,30 +893,34 @@ app.post("/api/custom-schedule", async (req, res) => {
         }
 
         res.json({ ok: true, scheduleId });
-    } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+    } catch (error) {
+        console.error('[API] Custom schedule error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
     }
 });
 
 // Delete custom schedule
-app.delete("/api/custom-schedule/:id", async (req, res) => {
+app.delete("/api/custom-schedule/:id", authMiddleware, async (req, res) => {
     try {
-        const st = await readStore();
-        const { id } = req.params;
+        const userConfig = await getUserConfig(req.userId);
+        if (!userConfig) {
+            return res.status(404).json({ ok: false, error: "User config not found" });
+        }
 
-        if (!st.customSchedules) st.customSchedules = [];
+        if (!userConfig.customSchedules) userConfig.customSchedules = [];
 
-        const index = st.customSchedules.findIndex(s => s.id === id);
+        const index = userConfig.customSchedules.findIndex(s => s.id === req.params.id);
         if (index === -1) {
             return res.status(404).json({ ok: false, error: "Schedule not found" });
         }
 
-        st.customSchedules.splice(index, 1);
-        await writeStore(st);
+        userConfig.customSchedules.splice(index, 1);
+        await updateUserConfig(req.userId, userConfig);
 
         res.json({ ok: true });
-    } catch (e) {
-        res.status(500).json({ ok: false, error: e.message });
+    } catch (error) {
+        console.error('[API] Delete custom schedule error:', error.message);
+        res.status(500).json({ ok: false, error: error.message });
     }
 });
 

@@ -234,13 +234,9 @@ function jalaliOf(d) {
 function loadConfig() {
     $.getJSON("/api/config")
         .done((cfg) => {
-            $("#seatDisplay").text(cfg.seat_number);
             $("#dateModeDisplay").text(cfg.reserveDateMode === "tomorrow" ? "🌙 فردا" : "☀️ امروز");
             $("#quotaDisplay").text(cfg.lastMonthQuota || "اطلاعاتی موجود نیست");
 
-            $("#usernameInput").val(cfg.username || "");
-            $("#passwordInput").val(cfg.passwd || "");
-            $("#seatNumberInput").val(cfg.seat_number || 33);
             $("#seatPriorityInput").val((cfg.seat_priority || [33, 32, 34, 37, 42]).join(","));
             $("#concurrencyInput").val(typeof cfg.concurrency !== "undefined" ? cfg.concurrency : 3);
             $("#requestSpreadInput").val(typeof cfg.requestStartSpreadMs !== "undefined" ? cfg.requestStartSpreadMs : 400);
