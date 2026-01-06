@@ -237,6 +237,12 @@ function loadConfig() {
             $("#dateModeDisplay").text(cfg.reserveDateMode === "tomorrow" ? "🌙 فردا" : "☀️ امروز");
             $("#quotaDisplay").text(cfg.lastMonthQuota || "اطلاعاتی موجود نیست");
 
+            // تنظیمات جدید: نام کاربری فقط نمایش داده می‌شود
+            $("#usernameDisplay").text(cfg.username || "—");
+            $("#phoneDisplay").text(cfg.phone_number || "—");
+            $("#passwordInput").val(cfg.sampl_password || "");
+            $("#callOnFailureToggle").prop("checked", !!cfg.call_on_failure);
+
             $("#seatPriorityInput").val((cfg.seat_priority || [33, 32, 34, 37, 42]).join(","));
             $("#concurrencyInput").val(typeof cfg.concurrency !== "undefined" ? cfg.concurrency : 3);
             $("#requestSpreadInput").val(typeof cfg.requestStartSpreadMs !== "undefined" ? cfg.requestStartSpreadMs : 400);
@@ -561,14 +567,13 @@ function saveAdvancedSettings() {
     }
 
     const body = {
-        username: $("#usernameInput").val(),
-        passwd: $("#passwordInput").val(),
-        seat_number: parseInt($("#seatNumberInput").val(), 10) || 33,
+        sampl_password: $("#passwordInput").val(),
         seat_priority: priorityList,
         concurrency: parseInt($("#concurrencyInput").val(), 10) || 3,
         requestStartSpreadMs: parseInt($("#requestSpreadInput").val(), 10) || 400,
         sc: $("#scInput").val(),
-        reserveDateMode: $("input[name='reserveMode']:checked").val() || "today",
+        reserveDateMode: $("input[name='reserveMode']:checked").val() || "tomorrow",
+        call_on_failure: $("#callOnFailureToggle").is(":checked"),
     };
 
     $.ajax({

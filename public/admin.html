@@ -108,7 +108,9 @@
             $('#logoutBtn').on('click', function () {
                 isAuthenticated = false;
                 $('#mainContent').addClass('opacity-0').addClass('pointer-events-none');
-                $('#passwordModal').removeClass('opacity-0').removeClass('pointer-events-none');
+                $('#passwordModal').fadeIn(300, function () {
+                    $(this).removeClass('opacity-0').removeClass('pointer-events-none');
+                });
                 $('#adminPassword').val('');
                 $('#passwordMessage').text('');
             });
@@ -130,7 +132,9 @@
                 });
 
                 isAuthenticated = true;
-                $('#passwordModal').addClass('opacity-0').addClass('pointer-events-none');
+                $('#passwordModal').fadeOut(300, function () {
+                    $(this).addClass('opacity-0').addClass('pointer-events-none');
+                });
                 $('#mainContent').removeClass('opacity-0').removeClass('pointer-events-none');
                 loadUsers('all');
             } catch (error) {

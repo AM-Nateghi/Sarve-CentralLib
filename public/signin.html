@@ -49,7 +49,6 @@
                 </div>
                 <button id="signinBtn"
                     class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 rounded-lg font-bold hover:shadow-lg transition">ورود</button>
-                <div id="signinMessage" class="text-center text-sm"></div>
             </div>
 
             <!-- Sign Up Form -->
@@ -60,8 +59,13 @@
                         class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold mb-2">رمز عبور</label>
-                    <input id="signupPassword" type="password" placeholder="رمز عبور قوی"
+                    <label class="block text-sm font-semibold mb-2">شماره موبایل (برای آوانک)</label>
+                    <input id="signupPhone" type="text" placeholder="مثال: 09121234567"
+                        class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-2">رمز عبور کل پکیج</label>
+                    <input id="signupPassword" type="password" placeholder="رمز عبور قوی برای ورود به اینجا"
                         class="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
                 </div>
                 <div>
@@ -77,7 +81,6 @@
                 <button id="signupBtn"
                     class="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white py-3 rounded-lg font-bold hover:shadow-lg transition">ثبت
                     نام</button>
-                <div id="signupMessage" class="text-center text-sm"></div>
             </div>
 
             <!-- Info Message -->
@@ -85,6 +88,12 @@
                 <p>بعد از ثبت نام، کاربر باید توسط مدیریت تایید شود.</p>
             </div>
         </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"
+        class="fixed bottom-4 right-4 z-40 bg-slate-900 text-white px-6 py-3 rounded-lg shadow-lg opacity-0 transition-opacity pointer-events-none">
+        <span id="toastMessage"></span>
     </div>
 
     <script>
@@ -112,7 +121,7 @@
                 const password = $('#signinPassword').val().trim();
 
                 if (!username || !password) {
-                    showMessage('#signinMessage', 'لطفا تمام فیلد‌ها را پر کنید', false);
+                    showToast('لطفا تمام فیلد‌ها را پر کنید', false);
                     return;
                 }
 
@@ -124,25 +133,31 @@
                         data: JSON.stringify({ username, password })
                     });
 
-                    showMessage('#signinMessage', 'ورود موفق!', true);
+                    showToast('ورود موفق!', true);
                     setTimeout(() => {
                         window.location.href = '/';
                     }, 1000);
                 } catch (error) {
                     const msg = error.responseJSON?.error || 'خطا در ورود';
-                    showMessage('#signinMessage', msg, false);
+                    showToast(msg, false);
                 }
             });
 
             // Sign Up
             $('#signupBtn').on('click', async function () {
                 const username = $('#signupUsername').val().trim();
+                const phoneNumber = $('#signupPhone').val().trim();
                 const password = $('#signupPassword').val().trim();
                 const sc = $('#signupSc').val().trim();
                 const seatPriorityStr = $('#signupSeatPriority').val().trim();
 
-                if (!username || !password || !sc || !seatPriorityStr) {
-                    showMessage('#signupMessage', 'لطفا تمام فیلد‌های الزامی را پر کنید', false);
+                if (!username || !phoneNumber || !password || !sc || !seatPriorityStr) {
+                    showToast('لطفا تمام فیلد‌های الزامی را پر کنید', false);
+                    return;
+                }
+
+                if (!/^09\d{9}$/.test(phoneNumber)) {
+                    showToast('شماره موبایل وارد شده معتبر نیست (مثال: 09121234567)', false);
                     return;
                 }
 
@@ -153,7 +168,7 @@
                 }).filter(n => n !== null);
 
                 if (seatPriority.length === 0) {
-                    showMessage('#signupMessage', 'اولویت صندلی نامعتبر است', false);
+                    showToast('اولویت صندلی نامعتبر است', false);
                     return;
                 }
 
@@ -165,12 +180,13 @@
                         data: JSON.stringify({
                             username,
                             password,
+                            phone_number: phoneNumber,
                             sc,
                             seat_priority: seatPriority
                         })
                     });
 
-                    showMessage('#signupMessage', 'ثبت نام موفق! منتظر تایید مدیریت باشید.', true);
+                    showToast('ثبت نام موفق! منتظر تایید مدیریت باشید.', true);
                     setTimeout(() => {
                         $('#signupUsername').val('');
                         $('#signupPassword').val('');
@@ -180,15 +196,24 @@
                     }, 2000);
                 } catch (error) {
                     const msg = error.responseJSON?.error || 'خطا در ثبت نام';
-                    showMessage('#signupMessage', msg, false);
+                    showToast(msg, false);
                 }
             });
 
-            function showMessage(selector, msg, isSuccess) {
-                const $el = $(selector);
-                $el.text(msg);
-                $el.removeClass('text-red-600 text-green-600');
-                $el.addClass(isSuccess ? 'text-green-600' : 'text-red-600');
+            function showToast(message, isSuccess = true) {
+                const icon = isSuccess ? "✓" : "⚠️";
+                const $toast = $("#toast");
+                $("#toastMessage").text(`${icon} ${message}`);
+                $toast.removeClass("bg-red-600 bg-slate-900").addClass(isSuccess ? "bg-slate-900" : "bg-red-600");
+                $toast.removeClass("opacity-0 pointer-events-none");
+
+                if ($toast.data('timeout')) clearTimeout($toast.data('timeout'));
+
+                const timeout = setTimeout(() => {
+                    $toast.addClass("opacity-0 pointer-events-none");
+                }, 3000);
+
+                $toast.data('timeout', timeout);
             }
         });
     </script>

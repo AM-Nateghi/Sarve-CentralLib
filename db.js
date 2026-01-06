@@ -13,8 +13,30 @@ const DB_CONFIG = {
     queueLimit: 0
 };
 
+const LOCAL_DB_CONFIG = {
+    host: 'localhost',
+    port: 3306,
+    user: 'devspace',
+    password: 'dfd404gk5$G%$V^Iv5y6',
+    database: 'blissful_lewin',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+};
+
+let pool;
+
+const env = (process.env.NODE_ENV || '').trim();
+
 // ایجاد connection pool
-const pool = mysql.createPool(DB_CONFIG);
+if (env === 'development') {
+    console.log('[DB] Using local database configuration');
+    pool = mysql.createPool(LOCAL_DB_CONFIG);
+}
+else {
+    console.log('[DB] Using production database configuration');
+    pool = mysql.createPool(DB_CONFIG);
+}
 
 // -------------------- ایجاد جداول --------------------
 async function initDatabase() {
@@ -37,6 +59,8 @@ async function initDatabase() {
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 username VARCHAR(100) UNIQUE NOT NULL,
                 password VARCHAR(255) NOT NULL,
+                sampl_password VARCHAR(255),
+                phone_number VARCHAR(15), 
                 status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -52,9 +76,11 @@ async function initDatabase() {
                 user_id INT NOT NULL UNIQUE,
                 seat_priority VARCHAR(255),
                 sc VARCHAR(255),
+                sampl_password VARCHAR(255),
                 concurrency INT DEFAULT 3,
                 requestStartSpreadMs INT DEFAULT 400,
-                reserveDateMode VARCHAR(20) DEFAULT 'today',
+                reserveDateMode VARCHAR(20) DEFAULT 'tomorrow',
+                call_on_failure BOOLEAN DEFAULT FALSE,
                 selectedWindows JSON,
                 scheduledDays JSON,
                 customSchedules JSON,
@@ -188,7 +214,7 @@ async function logReservation(data) {
 async function getHistory(limit = 50) {
     try {
         const [rows] = await pool.query(
-            `SELECT entry_id, date, window, status, message, error, timestamp, jalali_date
+            `SELECT entry_id, date, window, status, message, error, timestamp, jalali_date, username
              FROM reservation_logs
              ORDER BY timestamp DESC
              LIMIT ?`,
@@ -202,10 +228,37 @@ async function getHistory(limit = 50) {
             message: row.message,
             error: row.error,
             timestamp: row.timestamp,
-            jalaliDate: row.jalali_date
+            jalaliDate: row.jalali_date,
+            username: row.username
         }));
     } catch (error) {
         console.error('[DB] Failed to get history:', error.message);
+        return [];
+    }
+}
+
+async function getHistoryForUser(userId, limit = 50) {
+    try {
+        const [rows] = await pool.query(
+            `SELECT entry_id, date, window, status, message, error, timestamp, jalali_date
+             FROM reservation_logs
+             WHERE user_id = ?
+             ORDER BY timestamp DESC
+             LIMIT ?`,
+            [userId, limit]
+        );
+        return rows.map(row => ({
+            id: row.entry_id,
+            date: row.date,
+            window: row.window,
+            status: row.status,
+            message: row.message,
+            error: row.error,
+            timestamp: row.timestamp,
+            jalaliDate: row.jalali_date
+        }));
+    } catch (error) {
+        console.error('[DB] Failed to get history for user:', error.message);
         return [];
     }
 }
@@ -281,11 +334,44 @@ async function writeStore(store) {
 }
 
 // -------------------- توابع مدیریت کاربران --------------------
-async function createUser(username, passwordHash) {
+async function getAllUsersWithConfigs() {
+    try {
+        const [rows] = await pool.query(`
+            SELECT u.id, u.username, u.status, u.phone_number, c.* 
+            FROM users u
+            JOIN user_configs c ON u.id = c.user_id
+            WHERE u.status = 'approved'
+        `);
+        return rows.map(row => ({
+            id: row.id,
+            username: row.username,
+            phone_number: row.phone_number,
+            config: {
+                user_id: row.user_id,
+                seat_priority: row.seat_priority ? row.seat_priority.split(',').map(s => parseInt(s, 10)) : [],
+                sc: row.sc,
+                sampl_password: row.sampl_password,
+                concurrency: row.concurrency,
+                requestStartSpreadMs: row.requestStartSpreadMs,
+                reserveDateMode: row.reserveDateMode,
+                call_on_failure: !!row.call_on_failure,
+                selectedWindows: row.selectedWindows ? JSON.parse(row.selectedWindows) : [],
+                scheduledDays: row.scheduledDays ? JSON.parse(row.scheduledDays) : {},
+                customSchedules: row.customSchedules ? JSON.parse(row.customSchedules) : [],
+                lastMonthQuota: row.lastMonthQuota
+            }
+        }));
+    } catch (error) {
+        console.error('[DB] Failed to get all users with configs:', error.message);
+        return [];
+    }
+}
+
+async function createUser(username, passwordHash, phoneNumber) {
     try {
         const [result] = await pool.query(
-            `INSERT INTO users (username, password, status) VALUES (?, ?, 'pending')`,
-            [username, passwordHash]
+            `INSERT INTO users (username, password, phone_number, status) VALUES (?, ?, ?, 'pending')`,
+            [username, passwordHash, phoneNumber]
         );
         return result.insertId;
     } catch (error) {
@@ -297,7 +383,7 @@ async function createUser(username, passwordHash) {
 async function getUserByUsername(username) {
     try {
         const [rows] = await pool.query(
-            `SELECT id, username, password, status, created_at FROM users WHERE username = ?`,
+            `SELECT id, username, password, phone_number, status, created_at FROM users WHERE username = ?`,
             [username]
         );
         return rows.length > 0 ? rows[0] : null;
@@ -310,7 +396,7 @@ async function getUserByUsername(username) {
 async function getUserById(userId) {
     try {
         const [rows] = await pool.query(
-            `SELECT id, username, status, created_at FROM users WHERE id = ?`,
+            `SELECT id, username, phone_number, status, created_at FROM users WHERE id = ?`,
             [userId]
         );
         return rows.length > 0 ? rows[0] : null;
@@ -365,17 +451,19 @@ async function createUserConfig(userId, config) {
     try {
         await pool.query(
             `INSERT INTO user_configs (
-                user_id, seat_priority, sc, concurrency, 
-                requestStartSpreadMs, reserveDateMode, selectedWindows, 
+                user_id, seat_priority, sc, sampl_password, concurrency, 
+                requestStartSpreadMs, reserveDateMode, call_on_failure, selectedWindows, 
                 scheduledDays, customSchedules, lastMonthQuota
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 userId,
                 config.seat_priority ? config.seat_priority.join(',') : '',
                 config.sc || '',
+                config.sampl_password || '',
                 config.concurrency || 3,
                 config.requestStartSpreadMs || 400,
-                config.reserveDateMode || 'today',
+                config.reserveDateMode || 'tomorrow',
+                config.call_on_failure ? 1 : 0,
                 JSON.stringify(config.selectedWindows || []),
                 JSON.stringify(config.scheduledDays || {}),
                 JSON.stringify(config.customSchedules || []),
@@ -401,9 +489,11 @@ async function getUserConfig(userId) {
             user_id: row.user_id,
             seat_priority: row.seat_priority ? row.seat_priority.split(',').map(s => parseInt(s, 10)) : [],
             sc: row.sc,
+            sampl_password: row.sampl_password,
             concurrency: row.concurrency,
             requestStartSpreadMs: row.requestStartSpreadMs,
             reserveDateMode: row.reserveDateMode,
+            call_on_failure: !!row.call_on_failure,
             selectedWindows: row.selectedWindows ? JSON.parse(row.selectedWindows) : [],
             scheduledDays: row.scheduledDays ? JSON.parse(row.scheduledDays) : {},
             customSchedules: row.customSchedules ? JSON.parse(row.customSchedules) : [],
@@ -418,22 +508,31 @@ async function getUserConfig(userId) {
 async function updateUserConfig(userId, config) {
     try {
         await pool.query(
-            `UPDATE user_configs SET
-                seat_priority = ?, sc = ?, concurrency = ?,
-                requestStartSpreadMs = ?, reserveDateMode = ?,
-                selectedWindows = ?, scheduledDays = ?,
-                customSchedules = ?, lastMonthQuota = ?
-             WHERE user_id = ?`,
+            `UPDATE user_configs SET 
+                seat_priority = ?, 
+                sc = ?, 
+                sampl_password = ?,
+                concurrency = ?, 
+                requestStartSpreadMs = ?, 
+                reserveDateMode = ?, 
+                call_on_failure = ?,
+                selectedWindows = ?, 
+                scheduledDays = ?, 
+                customSchedules = ?, 
+                lastMonthQuota = ?
+            WHERE user_id = ?`,
             [
                 config.seat_priority ? config.seat_priority.join(',') : '',
                 config.sc || '',
+                config.sampl_password || '',
                 config.concurrency || 3,
                 config.requestStartSpreadMs || 400,
-                config.reserveDateMode || 'today',
+                config.reserveDateMode || 'tomorrow',
+                config.call_on_failure ? 1 : 0,
                 JSON.stringify(config.selectedWindows || []),
                 JSON.stringify(config.scheduledDays || {}),
                 JSON.stringify(config.customSchedules || []),
-                config.lastMonthQuota || null,
+                config.lastMonthQuota !== undefined ? config.lastMonthQuota : null,
                 userId
             ]
         );
@@ -451,9 +550,11 @@ module.exports = {
     getAllSettings,
     logReservation,
     getHistory,
+    getHistoryForUser,
     getHistoryByDate,
     readStore,
     writeStore,
+    getAllUsersWithConfigs,
     createUser,
     getUserByUsername,
     getUserById,

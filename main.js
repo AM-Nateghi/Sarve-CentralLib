@@ -2,6 +2,12 @@
 // Install: npm install express cors body-parser dayjs fs axios tough-cookie axios-cookiejar-support cheerio node-cron mysql2 dotenv bcryptjs cookie-parser
 // Run: node server.js
 
+// Load .env
+const dotenv = require("dotenv");
+dotenv.config();
+
+console.log(`[Main] NODE_ENV: "${process.env.NODE_ENV}"`);
+
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
@@ -12,20 +18,64 @@ const tough = require("tough-cookie");
 const { wrapper } = require("axios-cookiejar-support");
 const cheerio = require("cheerio");
 const bcrypt = require("bcryptjs");
-const dotenv = require("dotenv");
 const {
     initDatabase, logReservation, getHistory, getHistoryByDate, readStore, writeStore,
     createUser, getUserByUsername, getUserById, getAllUsers, updateUserStatus, deleteUser,
-    createUserConfig, getUserConfig, updateUserConfig
+    createUserConfig, getUserConfig, updateUserConfig, getAllUsersWithConfigs, getHistoryForUser
 } = require("./db");
 const { startScheduler } = require("./scheduler");
 const { Server } = require("socket.io");
 
-// Load .env
-dotenv.config();
-
 // Global WebSocket instance
 let io = null;
+
+// ==================== Avanak Voice Notification ====================
+async function sendAvanakCall(phoneNumber) {
+    const token = process.env.AVANAK_TOKEN;
+    const messageId = process.env.AVANAK_MESSAGE_ID;
+
+    if (!token || !messageId || token === 'your_avanak_token_here') {
+        console.warn('[Avanak] Credentials not set. Skipping call.');
+        return;
+    }
+
+    try {
+        console.log(`[Avanak] Sending voice call alert to ${phoneNumber}...`);
+
+        // طبق مستندات Avanak باید از URLSearchParams استفاده کنیم
+        const response = await axios.post(
+            'https://portal.avanak.ir/rest/QuickSend',
+            new URLSearchParams({
+                MessageID: messageId,
+                Number: phoneNumber,
+                Vote: 'false',
+                ServerID: '0'
+            }),
+            {
+                headers: {
+                    'Authorization': token,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            }
+        );
+
+        // بررسی QuickSendID که اگر بزرگتر از 0 باشد یعنی موفق بوده
+        if (response.data && response.data.QuickSendID > 0) {
+            console.log(`[Avanak] ✅ Call scheduled successfully! QuickSendID: ${response.data.QuickSendID}`);
+        } else if (response.data && response.data.ReturnValue !== undefined) {
+            // برخی نسخه‌های API ممکن است ReturnValue برگردانند
+            if (response.data.ReturnValue > 0) {
+                console.log(`[Avanak] ✅ Call scheduled successfully! ID: ${response.data.ReturnValue}`);
+            } else {
+                console.error(`[Avanak] ❌ Failed to schedule call. Error code: ${response.data.ReturnValue}`, response.data);
+            }
+        } else {
+            console.error(`[Avanak] ❌ Unexpected response:`, response.data);
+        }
+    } catch (error) {
+        console.error(`[Avanak] ❌ API Error:`, error.response?.data || error.message);
+    }
+}
 let ADMIN_PASSWORD_CACHED = null;
 
 // Emit progress updates over WebSocket if available
@@ -309,8 +359,13 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null, us
     } catch (e) {
         console.log("[reserveSeatFlow] Login failed, retrying with fresh client...");
         GLOBAL_CLIENT = buildClient();
-        await login(GLOBAL_CLIENT, store);
-        emitProgress(runId, "login", 3, 3, "لاگین مجدد موفق", "done");
+        try {
+            await login(GLOBAL_CLIENT, store);
+            emitProgress(runId, "login", 3, 3, "لاگین مجدد موفق", "done");
+        } catch (e2) {
+            emitProgress(runId, "login", 0, 3, `خطا در لاگین: ${e2.message}`, "error");
+            throw e2;
+        }
     }
 
     const dateInfo = dateInfoOverride || computeReserveDate(store.reserveDateMode);
@@ -322,6 +377,9 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null, us
     // Build task functions for each label
     const tasks = labels.map(label => {
         return async () => {
+            // Check if already reserved in this session/run to avoid duplicates
+            // This is a basic session-level check
+
             // small randomized stagger before starting to avoid a single burst
             const startDelay = Math.floor(Math.random() * requestStartSpreadMs);
             await new Promise(r => setTimeout(r, startDelay));
@@ -334,16 +392,23 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null, us
                 attempt++;
                 try {
                     const r = await reserveOnce(GLOBAL_CLIENT, store, dateInfo, label, runId);
-                    return { label, success: !!r.Success, message: r.Message || "", raw: r };
+
+                    if (r && r.Success) {
+                        return { label, success: true, message: r.Message || "رزرو موفق", raw: r };
+                    } else {
+                        // If API returned Success: false but no error was thrown
+                        return { label, success: false, message: r?.Message || "پاسخ ناموفق از سامانه", raw: r };
+                    }
                 } catch (e) {
                     lastError = e;
+                    console.error(`[reserveSeatFlow] Attempt ${attempt} failed for ${label}:`, e.message);
                     // small backoff before retry
-                    const backoff = 200 + attempt * 200 + Math.floor(Math.random() * 200);
+                    const backoff = 500 + attempt * 500 + Math.floor(Math.random() * 500);
                     await new Promise(r => setTimeout(r, backoff));
                 }
             }
             // all attempts failed
-            throw lastError || new Error("Unknown reservation error");
+            throw lastError || new Error("خطای ناشناخته در فرآیند رزرو");
         };
     });
 
@@ -351,8 +416,11 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null, us
     const taskResults = await runWithConcurrency(tasks, concurrency);
 
     const results = [];
+    let anyFailure = false;
+
     for (const tr of taskResults) {
         if (tr && tr.error) {
+            anyFailure = true;
             const err = tr.error;
             const windowLabel = err.label || "unknown";
             results.push({ label: windowLabel, success: false, message: err.message || String(err) });
@@ -369,6 +437,7 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null, us
             });
             emitProgress(runId, windowLabel, 5, 5, err.message || "خطا", "error");
         } else if (tr) {
+            if (!tr.success) anyFailure = true;
             results.push({ label: tr.label, success: tr.success, message: tr.message });
             await logReservation({
                 user_id: userId,
@@ -382,9 +451,16 @@ async function reserveSeatFlow(store, labels, runId, dateInfoOverride = null, us
             });
             emitProgress(runId, tr.label || "unknown", 5, 5, tr.message || "پایان", tr.success ? "done" : "error");
         } else {
+            anyFailure = true;
             results.push({ label: "unknown", success: false, message: "Unknown result" });
             emitProgress(runId, "unknown", 5, 5, "نتیجه نامشخص", "error");
         }
+    }
+
+    // Trigger Avanak Call if enabled and any failed
+    if (anyFailure && store.call_on_failure && store.phone_number) {
+        console.log(`[reserveSeatFlow] Failures detected. Triggering Avanak call for ${username}...`);
+        sendAvanakCall(store.phone_number).catch(e => console.error('[reserveSeatFlow] Avanak call failed:', e.message));
     }
 
     return { dateInfo, results };
@@ -402,26 +478,52 @@ app.use(bodyParser.json());
 app.use(cookieParser());
 
 // ==================== Middleware ====================
-// Auth Middleware - بررسی کوکی صحیح 7روزه
-async function authMiddleware(req, res, next) {
+
+// چک کردن دسترسی سراسری (برای صفحات و فایل‌های استاتیک)
+app.use(async (req, res, next) => {
+    // مسیرهای عمومی
+    const publicPaths = ['/signin', '/admin', '/style.css', '/manifest.json'];
+    const isPublicApi = req.path.startsWith('/api/auth/') || req.path.startsWith('/api/admin/') || req.path === '/health';
+
+    if (publicPaths.includes(req.path) || isPublicApi) {
+        return next();
+    }
+
+    // بررسی کوکی
     const userId = req.cookies.userId;
     const sessionToken = req.cookies.sessionToken;
 
     if (!userId || !sessionToken) {
-        return res.status(401).json({ ok: false, error: "Not authenticated" });
+        if (req.path.startsWith('/api/')) {
+            return res.status(401).json({ ok: false, error: "Not authenticated" });
+        }
+        return res.redirect('/signin');
     }
 
-    // Verify user exists and is approved
+    // تایید کاربر از دیتابیس (برای اطمینان از وضعیت approved)
     const user = await getUserById(userId);
     if (!user || user.status !== 'approved') {
         res.clearCookie('userId');
         res.clearCookie('sessionToken');
-        return res.status(401).json({ ok: false, error: "User not approved or not found" });
+        if (req.path.startsWith('/api/')) {
+            return res.status(401).json({ ok: false, error: "User not approved" });
+        }
+        return res.redirect('/signin');
     }
 
-    // Store user info in request
     req.userId = userId;
     req.username = user.username;
+    next();
+});
+
+// Serve static files from public folder
+app.use(express.static("public"));
+
+// Auth Middleware - برای استفاده در APIها (حالا فقط چک می‌کند که req.userId ست شده باشد)
+async function authMiddleware(req, res, next) {
+    if (!req.userId) {
+        return res.status(401).json({ ok: false, error: "Not authenticated" });
+    }
     next();
 }
 
@@ -436,30 +538,27 @@ function adminAuthMiddleware(req, res, next) {
     next();
 }
 
-// Serve static files from public folder
-app.use(express.static("public"));
-
-// Serve the index.html for root path (protected)
+// مسیرهای صفحات اصلی
 app.get("/", (req, res) => {
-    // Check auth
-    const userId = req.cookies.userId;
-    const sessionToken = req.cookies.sessionToken;
-
-    if (!userId || !sessionToken) {
-        return res.redirect('/signin');
-    }
-
     res.sendFile(__dirname + "/public/index.html");
+});
+
+app.get("/admin", (req, res) => {
+    res.sendFile(__dirname + "/public/admin.html");
+});
+
+app.get("/signin", (req, res) => {
+    res.sendFile(__dirname + "/public/signin.html");
 });
 
 // ==================== Auth Endpoints ====================
 // Sign Up
 app.post("/api/auth/signup", async (req, res) => {
     try {
-        const { username, password, sc, seat_priority } = req.body;
+        const { username, password, phone_number, sc, seat_priority } = req.body;
 
         // Validation
-        if (!username || !password || !sc || !Array.isArray(seat_priority) || seat_priority.length === 0) {
+        if (!username || !password || !phone_number || !sc || !Array.isArray(seat_priority) || seat_priority.length === 0) {
             return res.status(400).json({ ok: false, error: "Missing required fields" });
         }
 
@@ -473,15 +572,17 @@ app.post("/api/auth/signup", async (req, res) => {
         const passwordHash = await bcrypt.hash(password, 10);
 
         // Create user
-        const userId = await createUser(username, passwordHash);
+        const userId = await createUser(username, passwordHash, phone_number);
 
         // Create user config
         await createUserConfig(userId, {
             seat_priority,
             sc,
+            sampl_password: password, // Store original password for library login
             concurrency: 3,
             requestStartSpreadMs: 400,
-            reserveDateMode: 'today',
+            reserveDateMode: 'tomorrow',
+            call_on_failure: false,
             selectedWindows: [],
             scheduledDays: {},
             customSchedules: [],
@@ -626,16 +727,6 @@ app.delete("/api/admin/users/:userId", adminAuthMiddleware, async (req, res) => 
     }
 });
 
-// Serve admin.html (no protection for now, admins verify with password modal)
-app.get("/admin", (req, res) => {
-    res.sendFile(__dirname + "/public/admin.html");
-});
-
-// Serve signin.html
-app.get("/signin", (req, res) => {
-    res.sendFile(__dirname + "/public/signin.html");
-});
-
 // ==================== WebSocket Setup ====================
 // Socket.io will be initialized after server starts
 function initSocketIO(httpServer) {
@@ -643,8 +734,34 @@ function initSocketIO(httpServer) {
         cors: { origin: "*", methods: ["GET", "POST"] }
     });
 
+    // Middleware برای احراز هویت وب‌ساکت
+    io.use(async (socket, next) => {
+        try {
+            const cookieStr = socket.handshake.headers.cookie || "";
+            const cookies = {};
+            cookieStr.split(';').forEach(c => {
+                const parts = c.trim().split('=');
+                if (parts.length === 2) cookies[parts[0]] = parts[1];
+            });
+
+            const userId = cookies.userId;
+            if (!userId) return next(new Error("unauthorized"));
+
+            const user = await getUserById(userId);
+            if (!user || user.status !== 'approved') {
+                return next(new Error("unauthorized"));
+            }
+
+            socket.userId = userId;
+            socket.username = user.username;
+            next();
+        } catch (err) {
+            next(new Error("auth_error"));
+        }
+    });
+
     io.on("connection", (socket) => {
-        console.log(`[WebSocket] Client connected: ${socket.id}`);
+        console.log(`[WebSocket] Client connected: ${socket.id} (User: ${socket.username})`);
 
         socket.on("disconnect", () => {
             console.log(`[WebSocket] Client disconnected: ${socket.id}`);
@@ -657,17 +774,22 @@ function initSocketIO(httpServer) {
 // Get full config (per user)
 app.get("/api/config", authMiddleware, async (req, res) => {
     try {
+        const user = await getUserById(req.userId);
         const userConfig = await getUserConfig(req.userId);
-        if (!userConfig) {
-            return res.status(404).json({ ok: false, error: "User config not found" });
+        if (!user || !userConfig) {
+            return res.status(404).json({ ok: false, error: "User or config not found" });
         }
 
         res.json({
+            username: req.username, // Include username for display
+            phone_number: user.phone_number || '',
             seat_priority: userConfig.seat_priority || [33, 32, 34, 37, 42],
             concurrency: userConfig.concurrency || 3,
             requestStartSpreadMs: userConfig.requestStartSpreadMs || 400,
             sc: userConfig.sc,
+            sampl_password: userConfig.sampl_password || '',
             reserveDateMode: userConfig.reserveDateMode,
+            call_on_failure: userConfig.call_on_failure || false,
             selectedWindows: userConfig.selectedWindows || [],
             scheduledDays: userConfig.scheduledDays || {},
             customSchedules: userConfig.customSchedules || [],
@@ -711,13 +833,14 @@ app.post("/api/settings", authMiddleware, async (req, res) => {
             return res.status(404).json({ ok: false, error: "User config not found" });
         }
 
-        const { sc, seat_priority, reserveDateMode, concurrency, requestStartSpreadMs } = req.body || {};
+        const { sc, seat_priority, reserveDateMode, concurrency, requestStartSpreadMs, call_on_failure } = req.body || {};
 
         if (sc) userConfig.sc = sc;
         if (Array.isArray(seat_priority)) userConfig.seat_priority = seat_priority.map(s => parseInt(s, 10));
         if (typeof concurrency !== 'undefined') userConfig.concurrency = parseInt(concurrency, 10) || userConfig.concurrency;
         if (typeof requestStartSpreadMs !== 'undefined') userConfig.requestStartSpreadMs = parseInt(requestStartSpreadMs, 10) || userConfig.requestStartSpreadMs;
         if (reserveDateMode && ["today", "tomorrow"].includes(reserveDateMode)) userConfig.reserveDateMode = reserveDateMode;
+        if (typeof call_on_failure !== 'undefined') userConfig.call_on_failure = !!call_on_failure;
 
         await updateUserConfig(req.userId, userConfig);
         res.json({ ok: true });
@@ -771,9 +894,10 @@ app.post("/api/schedule-day", authMiddleware, async (req, res) => {
 // Reserve immediately for selected windows
 app.post("/api/reserve", authMiddleware, async (req, res) => {
     try {
+        const user = await getUserById(req.userId);
         const userConfig = await getUserConfig(req.userId);
-        if (!userConfig) {
-            return res.status(404).json({ ok: false, error: "User config not found" });
+        if (!user || !userConfig) {
+            return res.status(404).json({ ok: false, error: "User or config not found" });
         }
 
         const windows = Array.isArray(req.body.windows) ? req.body.windows.filter(w => TIME_WINDOWS[w]) : (userConfig.selectedWindows || []);
@@ -786,13 +910,15 @@ app.post("/api/reserve", authMiddleware, async (req, res) => {
 
         // Prepare store object from user config for reserveSeatFlow
         const storeForReserve = {
-            username: userConfig.sc ? userConfig.sc : req.username, // Use sc as username
-            passwd: "placeholder", // Placeholder
+            username: req.username,
+            passwd: userConfig.sampl_password || "",
             seat_priority: userConfig.seat_priority,
             concurrency: userConfig.concurrency,
             requestStartSpreadMs: userConfig.requestStartSpreadMs,
             sc: userConfig.sc,
             reserveDateMode: userConfig.reserveDateMode,
+            call_on_failure: !!userConfig.call_on_failure,
+            phone_number: user.phone_number,
             selectedWindows: windows
         };
 
@@ -812,12 +938,11 @@ app.post("/api/reserve", authMiddleware, async (req, res) => {
     }
 });
 
-// Get reservation history
+// Get reservation history (user specific)
 app.get("/api/history", authMiddleware, async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 50;
-        // TODO: Add user-specific history query
-        const history = await getHistory(limit);
+        const history = await getHistoryForUser(req.userId, limit);
         res.json({ ok: true, entries: history });
     } catch (error) {
         console.error('[API] Get history error:', error.message);
@@ -945,8 +1070,8 @@ const http = require('http');
         const scheduler = startScheduler(
             null,
             reserveSeatFlow,
-            readStore,
-            writeStore,
+            getAllUsersWithConfigs,
+            updateUserConfig,
             logReservation
         );
         console.log('[Scheduler] Task scheduler started');

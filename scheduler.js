@@ -42,15 +42,12 @@ function toJalaliFromISO(isoDateStr) {
  * @param {Function} writeStore - تابع نوشتن store
  * @param {Function} logReservation - تابع لاگ کردن
  */
-function startScheduler(store, reserveSeatFlow, readStore, writeStore, logReservation) {
+function startScheduler(store, reserveSeatFlow, getAllUsersWithConfigs, updateUserConfig, logReservation) {
     let task = null;
 
     function scheduleCheck() {
-        // ساعت 7:00 صبح هر روز (به وقت تهران UTC+3:30)
-        // برای Liara (سرور ایران) زمان محلی تهران است
         if (task) task.stop();
 
-        // چک کن هر 1 دقیقه
         task = cron.schedule('* * * * *', async () => {
             try {
                 const now = dayjs();
@@ -58,71 +55,94 @@ function startScheduler(store, reserveSeatFlow, readStore, writeStore, logReserv
                 const minute = now.minute();
                 const todayIso = now.format('YYYY-MM-DD');
 
-                const currentStore = await readStore();
+                // گرفتن لیست تمام کاربران تایید شده و تنظیماتشان
+                const users = await getAllUsersWithConfigs();
 
-                // 1. چک کن زمان‌بندی‌های دلخواه (Custom Schedules)
-                if (currentStore.customSchedules && Array.isArray(currentStore.customSchedules)) {
-                    const schedules = currentStore.customSchedules.filter(s => !s.executed);
+                for (const user of users) {
+                    const currentConfig = user.config;
 
-                    for (const schedule of schedules) {
-                        // چک کن آیا زمان اجرا رسیده است
-                        if (schedule.executionDate === todayIso && schedule.executionHour === hour && schedule.executionMinute === minute) {
-                            console.log(`[Scheduler] Running custom schedule: ${schedule.id} for ${schedule.reserveDate}`);
-                            try {
-                                const runId = `customsched-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-                                const { results } = await reserveSeatFlow(currentStore, schedule.windows, runId);
-                                console.log(`[Scheduler] Custom schedule results:`, results);
+                    // 1. چک کن زمان‌بندی‌های دلخواه (Custom Schedules)
+                    if (currentConfig.customSchedules && Array.isArray(currentConfig.customSchedules)) {
+                        let configChanged = false;
+                        for (const schedule of currentConfig.customSchedules) {
+                            if (!schedule.executed && schedule.executionDate === todayIso &&
+                                schedule.executionHour === hour && schedule.executionMinute === minute) {
 
-                                // فقط اگر حداقل یکی موفق باشد، executed رو true بکن
-                                const hasSuccess = results.some(r => r.success);
-                                if (hasSuccess) {
-                                    schedule.executed = true;
+                                console.log(`[Scheduler] User ${user.username}: Running custom schedule ${schedule.id}`);
+                                try {
+                                    const runId = `custom-sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+                                    // ساخت شیء مشابه store برای الگوریتم رزرو
+                                    const storeObj = {
+                                        username: user.username,
+                                        passwd: currentConfig.sampl_password,
+                                        phone_number: user.phone_number,
+                                        call_on_failure: currentConfig.call_on_failure,
+                                        seat_priority: currentConfig.seat_priority,
+                                        concurrency: currentConfig.concurrency,
+                                        requestStartSpreadMs: currentConfig.requestStartSpreadMs,
+                                        sc: currentConfig.sc,
+                                        reserveDateMode: currentConfig.reserveDateMode
+                                    };
+
+                                    const { results } = await reserveSeatFlow(storeObj, schedule.windows, runId, null, user.id, user.username);
+
+                                    if (results.some(r => r.success)) {
+                                        schedule.executed = true;
+                                        configChanged = true;
+                                    }
+                                } catch (e) {
+                                    console.error(`[Scheduler] Error for ${user.username}:`, e.message);
                                 }
-                                await writeStore(currentStore);
-                            } catch (e) {
-                                console.error(`[Scheduler] Error running custom schedule:`, e.message);
                             }
                         }
-                    }
-                }
-
-                // 2. چک کن زمان‌بندی‌های روزانه (scheduledDays) - ساعت 7:00
-                if (hour === 7 && minute === 0) {
-                    console.log('[Scheduler] Running scheduled task at 07:00...');
-
-                    const tomorrowIso = now.add(1, 'day').format('YYYY-MM-DD');
-
-                    // چک کن آیا امروز یا فردا برای رزرو زمان‌بندی شده است
-                    const scheduledToday = currentStore.scheduledDays?.[todayIso] || [];
-                    const scheduledTomorrow = currentStore.scheduledDays?.[tomorrowIso] || [];
-
-                    if (scheduledToday.length > 0) {
-                        console.log(`[Scheduler] Running reservation for today (${todayIso}): ${scheduledToday.join(', ')}`);
-                        try {
-                            const runId = `sched-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-                            const { results } = await reserveSeatFlow(currentStore, scheduledToday, runId);
-                            console.log(`[Scheduler] Today results:`, results);
-
-                            // پاک کردن از scheduled بعد از اجرا
-                            delete currentStore.scheduledDays[todayIso];
-                            await writeStore(currentStore);
-                        } catch (e) {
-                            console.error(`[Scheduler] Error running today reservation:`, e.message);
+                        if (configChanged) {
+                            await updateUserConfig(user.id, currentConfig);
                         }
                     }
 
-                    if (scheduledTomorrow.length > 0) {
-                        console.log(`[Scheduler] Running reservation for tomorrow (${tomorrowIso}): ${scheduledTomorrow.join(', ')}`);
-                        try {
-                            const runId = `sched-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-                            const { results } = await reserveSeatFlow(currentStore, scheduledTomorrow, runId);
-                            console.log(`[Scheduler] Tomorrow results:`, results);
+                    // 2. چک کن زمان‌بندی‌های روزانه (scheduledDays) - ساعت 7:00 صبح
+                    if (hour === 7 && minute === 0) {
+                        const tomorrowIso = now.add(1, 'day').format('YYYY-MM-DD');
+                        const scheduledToday = currentConfig.scheduledDays?.[todayIso] || [];
+                        const scheduledTomorrow = currentConfig.scheduledDays?.[tomorrowIso] || [];
 
-                            // پاک کردن از scheduled بعد از اجرا
-                            delete currentStore.scheduledDays[tomorrowIso];
-                            await writeStore(currentStore);
-                        } catch (e) {
-                            console.error(`[Scheduler] Error running tomorrow reservation:`, e.message);
+                        const runSchedule = async (isoDate, windows) => {
+                            if (windows.length > 0) {
+                                console.log(`[Scheduler] User ${user.username}: Running daily for ${isoDate}`);
+                                try {
+                                    const runId = `daily-sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                                    const storeObj = {
+                                        username: user.username,
+                                        passwd: currentConfig.sampl_password,
+                                        phone_number: user.phone_number,
+                                        call_on_failure: currentConfig.call_on_failure,
+                                        seat_priority: currentConfig.seat_priority,
+                                        concurrency: currentConfig.concurrency,
+                                        requestStartSpreadMs: currentConfig.requestStartSpreadMs,
+                                        sc: currentConfig.sc,
+                                        reserveDateMode: currentConfig.reserveDateMode
+                                    };
+                                    // تاریخ را دستی می‌فرستیم چون scheduledDays برای تاریخ خاصی است
+                                    const dateInfoOverride = { iso: isoDate };
+                                    // توجه: reserveSeatFlow باید بتواند dateInfoOverride را هندل کند یا ما باید آبجکت کامل بسازیم
+                                    // در main.js فعلی، reserveSeatFlow ورودی چهارم dateInfoOverride می‌گیرد
+                                    await reserveSeatFlow(storeObj, windows, runId, null, user.id, user.username);
+
+                                    delete currentConfig.scheduledDays[isoDate];
+                                    return true;
+                                } catch (e) {
+                                    console.error(`[Scheduler] Daily error for ${user.username}:`, e.message);
+                                }
+                            }
+                            return false;
+                        };
+
+                        const changed1 = await runSchedule(todayIso, scheduledToday);
+                        const changed2 = await runSchedule(tomorrowIso, scheduledTomorrow);
+
+                        if (changed1 || changed2) {
+                            await updateUserConfig(user.id, currentConfig);
                         }
                     }
                 }
@@ -131,7 +151,7 @@ function startScheduler(store, reserveSeatFlow, readStore, writeStore, logReserv
             }
         });
 
-        console.log('[Scheduler] Task scheduler started (runs every 1 minute, checks custom schedules and daily tasks)');
+        console.log('[Scheduler] Multi-user task scheduler started');
     }
 
     scheduleCheck();
