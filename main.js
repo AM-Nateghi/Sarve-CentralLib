@@ -833,9 +833,10 @@ app.post("/api/settings", authMiddleware, async (req, res) => {
             return res.status(404).json({ ok: false, error: "User config not found" });
         }
 
-        const { sc, seat_priority, reserveDateMode, concurrency, requestStartSpreadMs, call_on_failure } = req.body || {};
+        const { sc, seat_priority, reserveDateMode, concurrency, requestStartSpreadMs, call_on_failure, sampl_password } = req.body || {};
 
         if (sc) userConfig.sc = sc;
+        if (sampl_password) userConfig.sampl_password = sampl_password;
         if (Array.isArray(seat_priority)) userConfig.seat_priority = seat_priority.map(s => parseInt(s, 10));
         if (typeof concurrency !== 'undefined') userConfig.concurrency = parseInt(concurrency, 10) || userConfig.concurrency;
         if (typeof requestStartSpreadMs !== 'undefined') userConfig.requestStartSpreadMs = parseInt(requestStartSpreadMs, 10) || userConfig.requestStartSpreadMs;
